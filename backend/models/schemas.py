@@ -4,10 +4,9 @@ from datetime import datetime
 
 
 class EventoSensor(BaseModel):
-    """
-    Payload enviado pelo ESP32 + MediaPipe ao backend.
-    Todos os dados são anônimos — sem imagem, sem rosto, sem voz.
-    """
+   
+    # Payload enviado pelo ESP32 + MediaPipe ao backend.
+    
     device_id: str = Field(default="esp32-loja-01")
     setor: str = Field(default="eletronicos")
     presenca: bool
@@ -21,9 +20,9 @@ class EventoSensor(BaseModel):
 
 
 class DecisaoIA(BaseModel):
-    """
-    Resposta do agente de IA após interpretar um EventoSensor.
-    """
+   
+    # Resposta do agente de IA após interpretar um EventoSensor.
+    
     perfil: str
     confianca: float = Field(ge=0.0, le=1.0)
     raciocinio: str
@@ -35,9 +34,9 @@ class DecisaoIA(BaseModel):
 
 
 class MensagemWS(BaseModel):
-    """
-    Estrutura enviada via WebSocket para o dashboard.
-    """
+    
+    # Estrutura enviada via WebSocket para o dashboard.
+    
     tipo: str          # "evento" | "simulacao" | "connected" | "pong"
     payload: Optional[EventoSensor] = None
     decisao: Optional[DecisaoIA] = None
@@ -45,8 +44,8 @@ class MensagemWS(BaseModel):
 
 
 class SimularRequest(BaseModel):
-    """
-    Body do POST /simular.
-    cenario=None significa aleatório.
-    """
+    
+    # Body do POST /simular.
+    #cenario=None significa aleatório.
+    
     cenario: Optional[str] = None
