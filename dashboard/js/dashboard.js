@@ -9,7 +9,7 @@ let autoMode     = false;
 let autoCycle    = null;
 let autoCycleIdx = 0;
 
-const autoCycleList = ['indeciso','pesquisa','comprando','medo','saindo','ausente'];
+const autoCycleList = ['indeciso','pesquisa','comprando','medo_de_errar','saindo','ausente'];
 
 // ── Clock ──────────────────────────────────────────────────
 
@@ -200,7 +200,7 @@ function toggleAuto() {
 
 function triggerScenario(cenario) {
   document.querySelectorAll('.scenario-btn').forEach(b => b.classList.remove('active'));
-  const btns = ['indeciso','comprando','saindo','pesquisa','medo','ausente'];
+  const btns = ['indeciso','comprando','saindo','pesquisa','medo_de_errar','ausente'];
   const idx  = btns.indexOf(cenario);
   if (idx >= 0) document.querySelectorAll('.scenario-btn')[idx].classList.add('active');
 

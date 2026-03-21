@@ -58,6 +58,12 @@ CENARIOS = {
 
 CENARIOS_COM_PRESENCA = [c for c in CENARIOS if c != "sem_presenca"]
 
+ALIASES = {
+    "medo":      "medo_de_errar",
+    "comprando": "quase_comprando",
+    "saindo":    "prestes_a_sair",
+    "pesquisa":  "pesquisando",
+}
 
 class SimulatorProvider(SensorProvider):
     """
@@ -69,6 +75,8 @@ class SimulatorProvider(SensorProvider):
     def gerar_evento(self, cenario: Optional[str] = None) -> EventoSensor:
         if cenario is None:
             cenario = random.choice(CENARIOS_COM_PRESENCA)
+        
+        cenario = ALIASES.get(cenario, cenario)
 
         if cenario not in CENARIOS:
             raise ValueError(
