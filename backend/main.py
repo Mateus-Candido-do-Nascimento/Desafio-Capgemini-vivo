@@ -9,7 +9,8 @@ from services.broadcaster import BroadcasterService
 from services.analytics import AnalyticsService
 from services.agente import AgenteService
 from routes import evento, simular
-
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
 
 # ─────────────────────────────────────────
 # Instâncias únicas (injeção manual)
@@ -45,6 +46,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ─────────────────────────────────────────
+# Dashboard estático
+# ─────────────────────────────────────────
+
+DASHBOARD_DIR = Path(__file__).parent.parent / "dashboard"
+if DASHBOARD_DIR.exists():
+    app.mount("/dashboard", StaticFiles(directory=str(DASHBOARD_DIR), html=True), name="dashboard")
 
 # ─────────────────────────────────────────
 # Rotas
