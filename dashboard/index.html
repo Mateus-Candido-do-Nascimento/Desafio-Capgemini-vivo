@@ -1,0 +1,167 @@
+// ═══════════════════════════════════════════════════════════
+// WIREFRAME CANVAS — igual ao anterior, não muda
+// ═══════════════════════════════════════════════════════════
+const canvas = document.getElementById('wireCanvas');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+let wireframeState = 'idle';
+let targetPose  = {...poses.idle};
+let currentPose = {...poses.idle};
+
+// ... (mantém todo o código do wireframe que já existe)
+
+// ═══════════════════════════════════════════════════════════
+// WEBSOCKET — conexão com o backend
+// ═══════════════════════════════════════════════════════════
+
+let ws = null;
+let wsReconectando = false;
+
+function conectarWS() {
+  ws = new WebSocket('ws://localhost:8000/ws');
+
+  ws.onopen = () => {
+    console.log('[WS] Conectado ao backend');
+    document.getElementById('aiDot').className = 'status-dot';
+    document.getElementById('aiStatus').textContent = 'GROQ CONECTADO';
+    addLog('SYS', 'WebSocket conectado ao backend');
+    wsReconectando = false;
+
+    // Mantém conexão viva com ping a cada 20s
+    setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) ws.send('ping');
+    }, 20000);
+  };
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    if (msg.tipo === 'pong') return;
+    if (msg.tipo === 'connected') return;
+    aplicarMensagem(msg);
+  };
+
+  ws.onclose = () => {
+    console.log('[WS] Desconectado — tentando reconectar...');
+    document.getElementById('aiDot').className = 'status-dot warning';
+    document.getElementById('aiStatus').textContent = 'RECONECTANDO...';
+    if (!wsReconectando) {
+      wsReconectando = true;
+      setTimeout(conectarWS, 3000);
+    }
+  };
+
+  ws.onerror = (err) => {
+    console.error('[WS] Erro:', err);
+  };
+}
+
+// ═══════════════════════════════════════════════════════════
+// APLICAR MENSAGEM DO BACKEND NO DASHBOARD
+// ═══════════════════════════════════════════════════════════
+
+function aplicarMensagem(msg) {
+  const payload  = msg.payload;
+  const decisao  = msg.decisao;
+  if (!payload || !decisao) return;
+
+  // Mapeia estado do backend para cenário do wireframe
+  const mapaEstado = {
+    'indeciso':        'indeciso',
+    'quase_comprando': 'comprando',
+    'prestes_a_sair':  'saindo',
+    'pesquisando':     'pesquisa',
+    'medo_de_errar':   'medo',
+    'sem_presenca':    'ausente',
+  };
+  const cenario = mapaEstado[payload.estado_estimado] || 'idle';
+  wireframeState = cenario;
+  targetPose = {...(poses[cenario] || poses.idle)};
+
+  // Métricas
+  document.getElementById('tempoParado').innerHTML =
+    `${payload.tempo_parado}<span class="metric-unit">s</span>`;
+  document.getElementById('attentionScore').textContent =
+    payload.attention_score.toFixed(2);
+  document.getElementById('hesitationScore').textContent =
+    payload.hesitation_score.toFixed(2);
+  document.getElementById('movimento').textContent =
+    payload.movimento.toUpperCase();
+
+  // Barras
+  const atencao   = Math.round(payload.attention_score * 100);
+  const intencao  = decisao.perfil === 'QUASE_COMPRANDO' ? 87 :
+                    decisao.perfil === 'PESQUISANDO'      ? 48 :
+                    decisao.perfil === 'INDECISO'         ? 35 : 12;
+  const saida     = decisao.perfil === 'PRESTES_A_SAIR'  ? 88 :
+                    Math.round(payload.hesitation_score * 60);
+
+  document.getElementById('barAtencao').style.width  = atencao + '%';
+  document.getElementById('barAtencaoVal').textContent = atencao + '%';
+  document.getElementById('barIntencao').style.width  = intencao + '%';
+  document.getElementById('barIntencaoVal').textContent = intencao + '%';
+  document.getElementById('barSaida').style.width     = saida + '%';
+  document.getElementById('barSaidaVal').textContent  = saida + '%';
+
+  // Payload no painel
+  document.getElementById('pSetor').textContent    = `"${payload.setor}"`;
+  document.getElementById('pPostura').textContent  = `"${payload.postura}"`;
+  document.getElementById('pEstado').textContent   = `"${payload.estado_estimado}"`;
+  document.getElementById('pPresenca').textContent = payload.presenca ? 'true' : 'false';
+
+  // Decisão da IA
+  const mapaClasse = {
+    'INDECISO':        'indeciso',
+    'QUASE_COMPRANDO': 'comprando',
+    'PRESTES_A_SAIR':  'saindo',
+    'PESQUISANDO':     'pesquisa',
+    'MEDO_DE_ERRAR':   'medo',
+  };
+  const tag = document.getElementById('profileTag');
+  tag.textContent  = '● ' + decisao.perfil.replace('_', ' ');
+  tag.className    = 'profile-tag ' + (mapaClasse[decisao.perfil] || 'pesquisa');
+
+  document.getElementById('decisionText').textContent = decisao.raciocinio;
+  document.getElementById('actionText').textContent   = decisao.acao_vendedor;
+  document.getElementById('decisionTs').textContent   = getTime();
+  document.getElementById('latencyBadge').textContent = decisao.latencia_ms + 'ms';
+
+  const conf = Math.round(decisao.confianca * 100);
+  document.getElementById('confidenceFill').style.width = conf + '%';
+  document.getElementById('confidencePct').textContent  = conf + '%';
+
+  // Logs e timeline
+  addLog('ESP', `presença=${payload.presenca}, postura=${payload.postura}`);
+  addLog('AI',  `perfil=${decisao.perfil}, conf=${conf}%, ${decisao.latencia_ms}ms`);
+  addTimeline(
+    decisao.raciocinio,
+    decisao.urgencia === 'CRITICA' ? '#ff3d5a' :
+    decisao.urgencia === 'ALTA'    ? '#ff7340' :
+    decisao.urgencia === 'MEDIA'   ? '#ffd060' : '#00b4ff',
+    'GROQ / Llama 3.3 70B'
+  );
+
+  // Alerta se urgência crítica ou prestes a sair
+  if (decisao.urgencia === 'CRITICA' || decisao.perfil === 'PRESTES_A_SAIR') {
+    showAlert(decisao.acao_display);
+  }
+
+  // Stats
+  stats.eventos++;
+  if (decisao.urgencia === 'CRITICA' || decisao.urgencia === 'ALTA') stats.alertas++;
+  if (decisao.perfil === 'QUASE_COMPRANDO') stats.vendas++;
+  document.getElementById('statEventos').textContent = stats.eventos;
+  document.getElementById('statAlertas').textContent = stats.alertas;
+  document.getElementById('statVendas').textContent  = stats.vendas;
+}
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+
+conectarWS();
+updateClock();
+setInterval(updateClock, 1000);
+```
+
+---
