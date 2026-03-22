@@ -3,9 +3,9 @@ import json
 import time
 from groq import Groq
 from dotenv import load_dotenv
-
 from providers.ia_provider import IAProvider
 from models.schemas import EventoSensor, DecisaoIA
+import time
 
 load_dotenv()
 
@@ -40,32 +40,37 @@ class GroqProvider(IAProvider):
 
     def analisar(self, evento: EventoSensor) -> DecisaoIA:
         inicio = time.time()
+        tentativas = 0
 
-        try:
-            response = self._client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user",   "content": evento.model_dump_json(indent=2)},
-                ],
-                temperature=0.3,
-                max_tokens=300,
+        while tentativas < 3:
+            try:
+                response = self._client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user",   "content": evento.model_dump_json(indent=2)},
+                    ],
+                    temperature=0.2,
+                    max_tokens=300,
             )
+                raw  = response.choices[0].message.content.strip()
+                data = json.loads(raw)
+                data["latencia_ms"] = int((time.time() - inicio) * 1000)
+                data["erro"]        = False
+                return DecisaoIA(**data)
 
-            raw = response.choices[0].message.content.strip()
-            data = json.loads(raw)
-            data["latencia_ms"] = int((time.time() - inicio) * 1000)
-            data["erro"] = False
-            return DecisaoIA(**data)
-
-        except Exception as e:
-            return DecisaoIA(
-                perfil="INDECISO",
-                confianca=0.5,
-                raciocinio=f"Erro na análise: {str(e)[:80]}",
-                acao_display="Atendimento disponível. Fale com nosso vendedor.",
-                acao_vendedor="Aborde o cliente com uma saudação amigável.",
-                urgencia="MEDIA",
-                latencia_ms=int((time.time() - inicio) * 1000),
-                erro=True,
+            except Exception as e:
+                tentativas += 1
+                if "rate_limit" in str(e).lower() and tentativas < 3:
+                    time.sleep(2)
+                    continue
+                return DecisaoIA(
+                    perfil="idle",
+                    confianca=0.0,
+                    raciocinio=f"Rate limit atingido — aguardando...",
+                    acao_display="Sistema em pausa. Aguarde.",
+                    acao_vendedor="Aguarde — limite de requisições atingido.",
+                    urgencia="BAIXA",
+                    latencia_ms=int((time.time() - inicio) * 1000),
+                    erro=True,
             )

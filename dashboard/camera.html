@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OlhoVivo AI — Câmera</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #07090f;
+      color: #c8d6e5;
+      font-family: monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+    }
+    h1 {
+      font-size: 14px;
+      color: #00b4ff;
+      letter-spacing: 0.1em;
+      margin-bottom: 12px;
+    }
+    #videoContainer {
+      position: relative;
+      width: 100%;
+      max-width: 360px;
+    }
+    video {
+      width: 100%;
+      border-radius: 8px;
+      border: 1px solid rgba(0,180,255,0.2);
+      display: block;
+    }
+    canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      border-radius: 8px;
+    }
+    #status {
+      margin-top: 12px;
+      font-size: 11px;
+      color: #4a5a70;
+      text-align: center;
+      line-height: 1.8;
+    }
+    #status span { color: #00b4ff; }
+    #estadoAtual {
+      margin-top: 12px;
+      font-size: 20px;
+      font-weight: bold;
+      letter-spacing: 0.1em;
+      text-align: center;
+    }
+    #btnStart {
+      margin-top: 16px;
+      padding: 12px 32px;
+      background: rgba(0,180,255,0.1);
+      border: 1px solid #00b4ff;
+      border-radius: 6px;
+      color: #00b4ff;
+      font-family: monospace;
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+    }
+    #btnStart:active { background: rgba(0,180,255,0.2); }
+    #log {
+      margin-top: 12px;
+      width: 100%;
+      max-width: 360px;
+      font-size: 10px;
+      color: #4a5a70;
+      max-height: 120px;
+      overflow-y: auto;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>OLHOVIVO AI — SENSOR VISUAL</h1>
+
+  <div id="videoContainer">
+    <video id="video" playsinline autoplay muted></video>
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <div id="estadoAtual">—</div>
+
+  <button id="btnStart" onclick="iniciar()">LIGAR CÂMERA</button>
+
+  <div id="status">
+    Status: <span id="statusTxt">aguardando...</span><br>
+    Backend: <span id="backendUrl">—</span><br>
+    Frames enviados: <span id="frameCount">0</span>
+  </div>
+
+  <div id="log"></div>
+
+  <!-- MediaPipe Pose via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+
+  <script>
+    // ── Configuração ──────────────────────────────────────
+    const BACKEND = 'https://costally-mythopoeic-alida.ngrok-free.dev';
+    const INTERVALO_MS = 2000; // envia 1 frame por segundo
+
+    const video      = document.getElementById('video');
+    const canvas     = document.getElementById('canvas');
+    const ctx        = canvas.getContext('2d');
+    const statusTxt  = document.getElementById('statusTxt');
+    const estadoEl   = document.getElementById('estadoAtual');
+    const frameEl    = document.getElementById('frameCount');
+    const logEl      = document.getElementById('log');
+
+    document.getElementById('backendUrl').textContent = BACKEND;
+
+    let frameCount   = 0;
+    let enviando     = false;
+    let ultimoEnvio  = 0;
+    let pose         = null;
+
+    // ── Log ───────────────────────────────────────────────
+
+    function log(msg) {
+      const linha = document.createElement('div');
+      linha.textContent = new Date().toTimeString().slice(0,8) + ' ' + msg;
+      logEl.insertBefore(linha, logEl.firstChild);
+      if (logEl.children.length > 20) logEl.removeChild(logEl.lastChild);
+    }
+
+    // ── Cores por estado ──────────────────────────────────
+
+    const CORES_ESTADO = {
+      idle:     '#4a5a70',
+      engajado: '#00b4ff',
+      indeciso: '#ffd060',
+      decisao:  '#00e5a0',
+      saindo:   '#ff3d5a',
+    };
+
+    // ── Callback do MediaPipe ─────────────────────────────
+
+    function onResults(results) {
+      // Ajusta canvas ao video
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (!results.poseLandmarks) return;
+
+      // Desenha skeleton no canvas
+      drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, {
+        color: 'rgba(0,180,255,0.5)',
+        lineWidth: 2,
+      });
+      drawLandmarks(ctx, results.poseLandmarks, {
+        color: 'rgba(0,229,160,0.8)',
+        lineWidth: 1,
+        radius: 3,
+      });
+
+      // Throttle — envia 1x por segundo
+      const agora = Date.now();
+      if (agora - ultimoEnvio < INTERVALO_MS) return;
+      ultimoEnvio = agora;
+
+      enviarFrame(results.poseLandmarks);
+    }
+
+    // ── Extrai landmarks relevantes ───────────────────────
+
+    function extrairLandmarks(landmarks) {
+      // Índices MediaPipe Pose:
+      // 0=nose, 11=left_shoulder, 12=right_shoulder
+      // 23=left_hip, 24=right_hip
+      // 15=left_wrist, 16=right_wrist
+      const l = landmarks;
+      return {
+        nose_y:           l[0]?.y  ?? 0.5,
+        left_shoulder_x:  l[11]?.x ?? 0.4,
+        left_shoulder_y:  l[11]?.y ?? 0.4,
+        right_shoulder_x: l[12]?.x ?? 0.6,
+        right_shoulder_y: l[12]?.y ?? 0.4,
+        left_hip_x:       l[23]?.x ?? 0.4,
+        left_hip_y:       l[23]?.y ?? 0.6,
+        right_hip_x:      l[24]?.x ?? 0.6,
+        right_hip_y:      l[24]?.y ?? 0.6,
+        left_wrist_x:     l[15]?.x ?? 0.3,
+        left_wrist_y:     l[15]?.y ?? 0.6,
+        right_wrist_x:    l[16]?.x ?? 0.7,
+        right_wrist_y:    l[16]?.y ?? 0.6,
+        visibility:       l[11]?.visibility ?? 1.0,
+      };
+    }
+
+    // ── Envia frame para o backend ────────────────────────
+
+    async function enviarFrame(landmarks) {
+      if (enviando) return;
+      enviando = true;
+
+      try {
+        const body = extrairLandmarks(landmarks);
+        const res  = await fetch(`${BACKEND}/sensor/frame`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(body),
+        });
+
+        const data = await res.json();
+
+        frameCount++;
+        frameEl.textContent = frameCount;
+
+        const estado = data.estado || 'idle';
+        estadoEl.textContent  = estado.toUpperCase();
+        estadoEl.style.color  = CORES_ESTADO[estado] || '#4a5a70';
+
+        log(`→ ${estado} | conf: ${(data.decisao?.confianca * 100).toFixed(0)}%`);
+        statusTxt.textContent = 'transmitindo';
+        statusTxt.style.color = '#00e5a0';
+
+      } catch (err) {
+        log(`ERRO: ${err.message}`);
+        statusTxt.textContent = 'erro — backend offline?';
+        statusTxt.style.color = '#ff3d5a';
+      } finally {
+        enviando = false;
+      }
+    }
+
+    // ── Inicia câmera + MediaPipe ─────────────────────────
+
+    async function iniciar() {
+      document.getElementById('btnStart').style.display = 'none';
+      statusTxt.textContent = 'iniciando câmera...';
+
+      pose = new Pose({
+        locateFile: (file) =>
+          `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
+      });
+
+      pose.setOptions({
+        modelComplexity:   1,
+        smoothLandmarks:   true,
+        enableSegmentation: false,
+        minDetectionConfidence: 0.6,
+        minTrackingConfidence:  0.6,
+      });
+
+      pose.onResults(onResults);
+
+      const camera = new Camera(video, {
+        onFrame: async () => {
+          await pose.send({ image: video });
+        },
+        width:  640,
+        height: 480,
+      });
+
+      await camera.start();
+      statusTxt.textContent = 'câmera ativa';
+      log('MediaPipe Pose iniciado');
+    }
+  </script>
+</body>
+</html>
