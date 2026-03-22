@@ -116,26 +116,27 @@ def _inferir_estado(
     shoulder_dx: float,
     visibility:  float,
 ) -> str:
-    """
-    Regras de inferência baseadas no documento comportamental.
-    Retorna um dos 5 estados operacionais válidos.
-    """
-    if visibility < 0.5:
+    if visibility < 0.4:
         return "idle"
 
-    if arm_raised and attention > 0.7:
+    # Braço levantado — alcançando produto
+    if arm_raised and attention > 0.5:
         return "decisao"
 
-    if shoulder_dx < 0.08:
+    # Corpo muito de lado — saindo
+    if shoulder_dx < 0.12:
         return "saindo"
 
-    if attention > 0.6 and hesitation < 0.4:
+    # Engajado — inclinado para frente com atenção
+    if attention > 0.5 and hesitation < 0.5:
         return "engajado"
 
-    if hesitation > 0.55 and attention < 0.7:
+    # Indeciso — hesitação alta
+    if hesitation > 0.45:
         return "indeciso"
 
-    if attention > 0.45:
+    # Engajado fraco
+    if attention > 0.35:
         return "engajado"
 
     return "idle"
