@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// DASHBOARD — estado global, UI helpers, simulador local
+// DASHBOARD — estado global, UI helpers, simulador
 // Responsabilidade: gerenciar estado e atualizar a tela
 // ═══════════════════════════════════════════════════════════
 
@@ -9,7 +9,7 @@ let autoMode     = false;
 let autoCycle    = null;
 let autoCycleIdx = 0;
 
-const autoCycleList = ['indeciso','pesquisa','comprando','medo_de_errar','saindo','ausente'];
+const autoCycleList = ['idle','engajado','indeciso','decisao','saindo'];
 
 // ── Clock ──────────────────────────────────────────────────
 
@@ -31,7 +31,10 @@ function addLog(type, msg) {
   const el       = document.createElement('div');
   el.className   = 'ev-item';
   const srcClass = type === 'ESP' ? 'esp' : type === 'CAM' ? 'cam' : 'ai';
-  el.innerHTML   = `<span class="ev-time">${getTime()}</span><span class="ev-src ${srcClass}">${type}</span><span class="ev-msg">${msg}</span>`;
+  el.innerHTML   = `
+    <span class="ev-time">${getTime()}</span>
+    <span class="ev-src ${srcClass}">${type}</span>
+    <span class="ev-msg">${msg}</span>`;
   log.insertBefore(el, log.firstChild);
   if (log.children.length > 30) log.removeChild(log.lastChild);
 }
@@ -63,22 +66,32 @@ function showAlert(text) {
   alertTimeout = setTimeout(() => banner.classList.remove('show'), 6000);
 }
 
-// ── Atualiza métricas na tela ──────────────────────────────
+// ── Cor por estado ─────────────────────────────────────────
+
+const COR_ESTADO = {
+  idle:     '#4a5a70',
+  engajado: '#00b4ff',
+  indeciso: '#ffd060',
+  decisao:  '#00e5a0',
+  saindo:   '#ff3d5a',
+};
+
+const CLASSE_ESTADO = {
+  idle:     'pesquisa',
+  engajado: 'pesquisa',
+  indeciso: 'indeciso',
+  decisao:  'comprando',
+  saindo:   'saindo',
+};
+
+// ── Atualiza tela com dados do backend ─────────────────────
 
 function atualizarMetricas(payload, decisao) {
-  // Wireframe
-  const mapaEstado = {
-    'indeciso':        'indeciso',
-    'quase_comprando': 'comprando',
-    'prestes_a_sair':  'saindo',
-    'pesquisando':     'pesquisa',
-    'medo_de_errar':   'medo',
-    'sem_presenca':    'ausente',
-  };
-  wireframeState = mapaEstado[payload.estado_estimado] || 'idle';
-  targetPose     = {...(poses[wireframeState] || poses.idle)};
 
-  // Números
+  // Wireframe
+  setEstado(payload.estado_estimado);
+
+  // Métricas numéricas
   document.getElementById('tempoParado').innerHTML =
     `${payload.tempo_parado}<span class="metric-unit">s</span>`;
   document.getElementById('attentionScore').textContent =
@@ -88,18 +101,21 @@ function atualizarMetricas(payload, decisao) {
   document.getElementById('movimento').textContent =
     payload.movimento.toUpperCase();
 
+  // Cores das métricas
   document.getElementById('attentionScore').className =
-    `metric-value ${payload.attention_score > 0.7 ? 'green' : payload.attention_score > 0.4 ? 'cyan' : 'orange'}`;
+    `metric-value ${payload.attention_score > 0.7 ? 'green' :
+                    payload.attention_score > 0.4 ? 'cyan' : 'orange'}`;
   document.getElementById('hesitationScore').className =
-    `metric-value ${payload.hesitation_score > 0.6 ? 'red' : payload.hesitation_score > 0.3 ? 'orange' : 'green'}`;
+    `metric-value ${payload.hesitation_score > 0.6 ? 'red' :
+                    payload.hesitation_score > 0.3 ? 'orange' : 'green'}`;
 
-  // Barras
+  // Barras de progresso
   const atencao  = Math.round(payload.attention_score * 100);
-  const intencao = decisao.perfil === 'QUASE_COMPRANDO' ? 87 :
-                   decisao.perfil === 'PESQUISANDO'      ? 48 :
-                   decisao.perfil === 'INDECISO'         ? 35 : 12;
-  const saida    = decisao.perfil === 'PRESTES_A_SAIR'   ? 88 :
-                   Math.round(payload.hesitation_score * 60);
+  const intencao = decisao.perfil === 'decisao'  ? 88 :
+                   decisao.perfil === 'engajado'  ? 55 :
+                   decisao.perfil === 'indeciso'  ? 35 : 10;
+  const saida    = decisao.perfil === 'saindo'    ? 90 :
+                   Math.round(payload.hesitation_score * 55);
 
   document.getElementById('barAtencao').style.width    = atencao + '%';
   document.getElementById('barAtencaoVal').textContent  = atencao + '%';
@@ -114,13 +130,13 @@ function atualizarMetricas(payload, decisao) {
   document.getElementById('pEstado').textContent   = `"${payload.estado_estimado}"`;
   document.getElementById('pPresenca').textContent = payload.presenca ? 'true' : 'false';
 
+  // JSON colorido
   const ts = new Date().toISOString().slice(0, 19);
   document.getElementById('payloadDisplay').innerHTML = `
 <span class="pk">{</span><br>
 &nbsp;&nbsp;<span class="pk">"setor": </span><span class="pv-str">"${payload.setor}"</span>,<br>
 &nbsp;&nbsp;<span class="pk">"presenca": </span><span class="pv-bool">${payload.presenca}</span>,<br>
 &nbsp;&nbsp;<span class="pk">"tempo_parado": </span><span class="pv-num">${payload.tempo_parado}</span>,<br>
-&nbsp;&nbsp;<span class="pk">"movimento": </span><span class="pv-str">"${payload.movimento}"</span>,<br>
 &nbsp;&nbsp;<span class="pk">"postura": </span><span class="pv-str">"${payload.postura}"</span>,<br>
 &nbsp;&nbsp;<span class="pk">"estado_estimado": </span><span class="pv-str">"${payload.estado_estimado}"</span>,<br>
 &nbsp;&nbsp;<span class="pk">"attention_score": </span><span class="pv-num">${payload.attention_score.toFixed(2)}</span>,<br>
@@ -129,16 +145,12 @@ function atualizarMetricas(payload, decisao) {
 <span class="pk">}</span>`;
 
   // Decisão da IA
-  const mapaClasse = {
-    'INDECISO':        'indeciso',
-    'QUASE_COMPRANDO': 'comprando',
-    'PRESTES_A_SAIR':  'saindo',
-    'PESQUISANDO':     'pesquisa',
-    'MEDO_DE_ERRAR':   'medo',
-  };
+  const cor   = COR_ESTADO[decisao.perfil]    || COR_ESTADO.idle;
+  const classe = CLASSE_ESTADO[decisao.perfil] || 'pesquisa';
+
   const tag     = document.getElementById('profileTag');
-  tag.textContent = '● ' + decisao.perfil.replace(/_/g, ' ');
-  tag.className   = 'profile-tag ' + (mapaClasse[decisao.perfil] || 'pesquisa');
+  tag.textContent = '● ' + decisao.perfil.toUpperCase();
+  tag.className   = 'profile-tag ' + classe;
 
   document.getElementById('decisionText').textContent = decisao.raciocinio;
   document.getElementById('decisionAction').querySelector('.action-icon').textContent = '💡';
@@ -151,34 +163,42 @@ function atualizarMetricas(payload, decisao) {
   document.getElementById('confidencePct').textContent  = conf + '%';
 
   // Status sensores
-  const temPresenca = payload.presenca;
-  document.getElementById('espDot').className       = 'status-dot ' + (temPresenca ? '' : 'warning');
-  document.getElementById('espStatus').textContent   = temPresenca ? 'ESP32 ATIVO' : 'ESP32 STANDBY';
-  document.getElementById('camDot').className       = 'status-dot ' + (temPresenca ? '' : 'warning');
-  document.getElementById('camStatus').textContent   = temPresenca ? 'CÂMERA ON' : 'CÂMERA PAUSADA';
+  document.getElementById('espDot').className      = 'status-dot ' + (payload.presenca ? '' : 'warning');
+  document.getElementById('espStatus').textContent  = payload.presenca ? 'ESP32 ATIVO' : 'ESP32 STANDBY';
+  document.getElementById('camDot').className      = 'status-dot ' + (payload.presenca ? '' : 'warning');
+  document.getElementById('camStatus').textContent  = payload.presenca ? 'CÂMERA ON'   : 'CÂMERA PAUSADA';
 
   // Logs
-  addLog('ESP', `presença=${payload.presenca}, postura=${payload.postura}, tempo=${payload.tempo_parado}s`);
+  addLog('ESP', `estado=${payload.estado_estimado}, tempo=${payload.tempo_parado}s, mv=${payload.movimento}`);
   addLog('AI',  `perfil=${decisao.perfil}, conf=${conf}%, ${decisao.latencia_ms}ms`);
 
   // Timeline
-  const tlColor = decisao.urgencia === 'CRITICA' ? '#ff3d5a' :
-                  decisao.urgencia === 'ALTA'     ? '#ff7340' :
-                  decisao.urgencia === 'MEDIA'    ? '#ffd060' : '#00b4ff';
-  addTimeline(decisao.raciocinio, tlColor, 'GROQ / Llama 3.3 70B → OlhoVivo Agent');
+  addTimeline(decisao.raciocinio, cor, 'GROQ / Llama 3.3 70B → OlhoVivo Agent');
 
   // Alerta
-  if (decisao.urgencia === 'CRITICA' || decisao.perfil === 'PRESTES_A_SAIR') {
+  if (decisao.urgencia === 'CRITICA' || decisao.perfil === 'saindo') {
     showAlert(decisao.acao_display);
   }
 
   // Stats
   stats.eventos++;
-  if (decisao.urgencia === 'CRITICA' || decisao.urgencia === 'ALTA') stats.alertas++;
-  if (decisao.perfil === 'QUASE_COMPRANDO') stats.vendas++;
+  if (decisao.urgencia === 'ALTA' || decisao.urgencia === 'CRITICA') stats.alertas++;
+  if (decisao.perfil === 'decisao') stats.vendas++;
   document.getElementById('statEventos').textContent = stats.eventos;
   document.getElementById('statAlertas').textContent = stats.alertas;
   document.getElementById('statVendas').textContent  = stats.vendas;
+}
+
+// ── Simulador — botões do painel ───────────────────────────
+
+function triggerScenario(cenario) {
+  document.querySelectorAll('.scenario-btn').forEach(b => b.classList.remove('active'));
+  const btns = ['idle','engajado','indeciso','decisao','saindo','sem_presenca'];
+  const idx  = btns.indexOf(cenario);
+  if (idx >= 0) document.querySelectorAll('.scenario-btn')[idx].classList.add('active');
+
+  fetch(`http://localhost:8000/simular/${cenario}`)
+    .catch(() => addLog('SYS', `Erro — backend online?`));
 }
 
 // ── Auto-ciclo ─────────────────────────────────────────────
@@ -188,7 +208,7 @@ function toggleAuto() {
   document.getElementById('autoToggle').classList.toggle('on', autoMode);
   if (autoMode) {
     autoCycle = setInterval(() => {
-      fetch(`http://localhost:8000/simular/${autoCycleList[autoCycleIdx % autoCycleList.length]}`)
+      triggerScenario(autoCycleList[autoCycleIdx % autoCycleList.length]);
       autoCycleIdx++;
     }, 8000);
   } else {
@@ -196,19 +216,11 @@ function toggleAuto() {
   }
 }
 
-// ── Botões do simulador ────────────────────────────────────
-
-function triggerScenario(cenario) {
-  document.querySelectorAll('.scenario-btn').forEach(b => b.classList.remove('active'));
-  const btns = ['indeciso','comprando','saindo','pesquisa','medo_de_errar','ausente'];
-  const idx  = btns.indexOf(cenario);
-  if (idx >= 0) document.querySelectorAll('.scenario-btn')[idx].classList.add('active');
-
-  fetch(`http://localhost:8000/simular/${cenario}`)
-    .catch(() => addLog('SYS', `Erro ao chamar /simular/${cenario} — backend online?`));
-}
-
 // ── Boot ───────────────────────────────────────────────────
 
 setTimeout(() => addLog('SYS', 'Dashboard iniciado'), 300);
-setTimeout(() => addTimeline('Sistema OlhoVivo AI inicializado.', '#00b4ff', 'SYS / Bootstrap'), 600);
+setTimeout(() => addTimeline(
+  'Sistema OlhoVivo AI inicializado.',
+  '#00b4ff',
+  'SYS / Bootstrap'
+), 600);
