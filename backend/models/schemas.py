@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
+from pydantic import BaseModel, Field, field_validator
 
 #Um conjunto com os únicos 5 valores aceitos. Fica fora da classe porque é uma constante do domínio — outros arquivos vão poder importar isso também.
 

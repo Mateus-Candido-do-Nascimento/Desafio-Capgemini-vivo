@@ -159,28 +159,41 @@
       </div>
     </div>
 
-    <div class="simulator-panel">
+     <div class="simulator-panel">
       <div class="sim-title">SIMULADOR ESP32</div>
       <div class="scenario-grid">
+        <button class="scenario-btn" onclick="triggerScenario('idle')">
+          <span class="icon">⭕</span>NEUTRO
+        </button>
+        <button class="scenario-btn" onclick="triggerScenario('engajado')">
+          <span class="icon">👁️</span>ENGAJADO
+        </button>
         <button class="scenario-btn" onclick="triggerScenario('indeciso')">
           <span class="icon">🤔</span>INDECISO
         </button>
-        <button class="scenario-btn" onclick="triggerScenario('comprando')">
-          <span class="icon">🛍️</span>COMPRANDO
+        <button class="scenario-btn" onclick="triggerScenario('decisao')">
+          <span class="icon">🛍️</span>DECISÃO
         </button>
         <button class="scenario-btn" onclick="triggerScenario('saindo')">
           <span class="icon">🚪</span>SAINDO
         </button>
-        <button class="scenario-btn" onclick="triggerScenario('pesquisa')">
-          <span class="icon">🔍</span>PESQUISA
-        </button>
-        <button class="scenario-btn" onclick="triggerScenario('medo')">
-          <span class="icon">😟</span>MEDO ERR.
-        </button>
-        <button class="scenario-btn" onclick="triggerScenario('ausente')">
-          <span class="icon">⭕</span>SEM PRESENÇA
+        <button class="scenario-btn" onclick="triggerScenario('sem_presenca')">
+          <span class="icon">📡</span>SEM PRESENÇA
         </button>
       </div>
+      <div class="auto-toggle">
+        <span class="auto-label">AUTO-CICLO (8s)</span>
+        <div class="toggle-switch" id="autoToggle" onclick="toggleAuto()"></div>
+      </div>
+      <div class="stats-row">
+        <div class="stat-mini"><div class="stat-mini-val" id="statEventos">0</div><div class="stat-mini-lbl">EVENTOS</div></div>
+        <div class="stat-mini"><div class="stat-mini-val" id="statAlertas">0</div><div class="stat-mini-lbl">ALERTAS</div></div>
+        <div class="stat-mini"><div class="stat-mini-val" id="statVendas">0</div><div class="stat-mini-lbl">VENDAS</div></div>
+      </div>
+    </div>
+
+  </div>
+
       <div class="auto-toggle">
         <span class="auto-label">AUTO-CICLO (8s)</span>
         <div class="toggle-switch" id="autoToggle" onclick="toggleAuto()"></div>
