@@ -6,9 +6,17 @@
 let ws            = null;
 let wsReconectando = false;
 
-function conectarWS() {
-  ws = new WebSocket('ws://localhost:8000/ws');
+  function conectarWS() {
+    const hostname = window.location.hostname;
+  
+    let wsUrl;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      wsUrl = 'ws://localhost:8000/ws';
+    }else {
+      wsUrl = `wss://${hostname}/ws`;
+    }
 
+    ws = new WebSocket(wsUrl);
   ws.onopen = () => {
     document.getElementById('aiDot').className     = 'status-dot';
     document.getElementById('aiStatus').textContent = 'GROQ CONECTADO';
