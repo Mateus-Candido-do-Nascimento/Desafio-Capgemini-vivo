@@ -38,8 +38,8 @@ def criar_router(agente: AgenteService) -> APIRouter:
         Recebe landmarks do MediaPipe, traduz para EventoSensor e processa.
         Nenhuma imagem é armazenada — só coordenadas abstratas.
         """
-        evento = _traduzir_frame(frame)
-        decisao = await agente.processar(evento, tipo="camera")
+        evento  = _traduzir_frame(frame)
+        decisao = await agente.processar(evento, tipo="camera", landmarks=frame.model_dump())
         return {"status": "processado", "estado": evento.estado_estimado, "decisao": decisao}
 
     return router
@@ -53,24 +53,27 @@ def _traduzir_frame(frame: FrameMediaPipe) -> EventoSensor:
     # Inclinação frontal — diferença Y entre ombros e quadril
     shoulder_y  = (frame.left_shoulder_y + frame.right_shoulder_y) / 2
     hip_y       = (frame.left_hip_y + frame.right_hip_y) / 2
-    lean_front  = shoulder_y - hip_y  # positivo = inclinado para frente
+    lean_front  = shoulder_y - hip_y  # negativo em câmera frontal (ombro acima do quadril)
 
     # Orientação lateral — assimetria entre ombros
+    # Valor alto = pessoa de frente; valor baixo = pessoa de lado (saindo)
     shoulder_dx = abs(frame.left_shoulder_x - frame.right_shoulder_x)
 
-    # Altura dos pulsos — braço levantado indica alcance
+    # Altura dos pulsos — braço levantado indica alcance de produto
     wrist_y_avg = (frame.left_wrist_y + frame.right_wrist_y) / 2
-    arm_raised  = wrist_y_avg < shoulder_y  # pulso acima do ombro
+    arm_raised  = wrist_y_avg < shoulder_y  # pulso acima do ombro na imagem
 
-    # Posição da cabeça — olhando para baixo indica leitura de produto
-    head_down   = frame.nose_y > shoulder_y + 0.05
+    # Cabeça abaixada — nariz próximo ou abaixo dos ombros (leitura de etiqueta)
+    # Threshold mais generoso: 0.08 abaixo do ombro (câmera frontal)
+    head_down   = frame.nose_y > shoulder_y - 0.08
 
-    # attention_score — baseado em inclinação frontal e orientação
+    # attention_score — câmera FRONTAL: usa largura dos ombros + braço levantado
+    # shoulder_dx alto = pessoa de frente = engajada
     attention = min(1.0, max(0.0,
-        0.4 + lean_front * 1.5 + (0.2 if arm_raised else 0)
+        0.3 + shoulder_dx * 1.2 + (0.25 if arm_raised else 0) + (0.1 if head_down else 0)
     ))
 
-    # hesitation_score — baseado em simetria e pouco movimento
+    # hesitation_score — simetria dos ombros (pessoa parada, centralizada)
     hesitation = min(1.0, max(0.0,
         0.8 - shoulder_dx * 2.0
     ))
