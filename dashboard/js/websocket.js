@@ -30,6 +30,7 @@ let wsReconectando = false;
 
   ws.onmessage = (event) => {
     const msg = JSON.parse(event.data);
+    console.log('ws recebido:',msg);
     if (msg.tipo === 'pong' || msg.tipo === 'connected') return;
     if (!msg.payload || !msg.decisao) return;
     atualizarMetricas(msg.payload, msg.decisao);

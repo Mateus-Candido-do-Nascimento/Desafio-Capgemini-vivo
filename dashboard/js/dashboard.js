@@ -64,21 +64,12 @@ function showAlert(text) {
 }
 
 // ── Atualiza métricas na tela ──────────────────────────────
-
 function atualizarMetricas(payload, decisao) {
-  // Wireframe
-  const mapaEstado = {
-    'indeciso':        'indeciso',
-    'quase_comprando': 'comprando',
-    'prestes_a_sair':  'saindo',
-    'pesquisando':     'pesquisa',
-    'medo_de_errar':   'medo',
-    'sem_presenca':    'ausente',
-  };
-  wireframeState = mapaEstado[payload.estado_estimado] || 'idle';
-  targetPose     = {...(poses[wireframeState] || poses.idle)};
 
-  // Números
+  // Wireframe — chama setEstado() do wireframe.js
+  setEstado(payload.estado_estimado);
+
+  // Métricas numéricas
   document.getElementById('tempoParado').innerHTML =
     `${payload.tempo_parado}<span class="metric-unit">s</span>`;
   document.getElementById('attentionScore').textContent =
@@ -89,17 +80,19 @@ function atualizarMetricas(payload, decisao) {
     payload.movimento.toUpperCase();
 
   document.getElementById('attentionScore').className =
-    `metric-value ${payload.attention_score > 0.7 ? 'green' : payload.attention_score > 0.4 ? 'cyan' : 'orange'}`;
+    `metric-value ${payload.attention_score > 0.7 ? 'green' :
+                    payload.attention_score > 0.4 ? 'cyan' : 'orange'}`;
   document.getElementById('hesitationScore').className =
-    `metric-value ${payload.hesitation_score > 0.6 ? 'red' : payload.hesitation_score > 0.3 ? 'orange' : 'green'}`;
+    `metric-value ${payload.hesitation_score > 0.6 ? 'red' :
+                    payload.hesitation_score > 0.3 ? 'orange' : 'green'}`;
 
   // Barras
   const atencao  = Math.round(payload.attention_score * 100);
-  const intencao = decisao.perfil === 'QUASE_COMPRANDO' ? 87 :
-                   decisao.perfil === 'PESQUISANDO'      ? 48 :
-                   decisao.perfil === 'INDECISO'         ? 35 : 12;
-  const saida    = decisao.perfil === 'PRESTES_A_SAIR'   ? 88 :
-                   Math.round(payload.hesitation_score * 60);
+  const intencao = decisao.perfil === 'decisao'  ? 88 :
+                   decisao.perfil === 'engajado'  ? 55 :
+                   decisao.perfil === 'indeciso'  ? 35 : 10;
+  const saida    = decisao.perfil === 'saindo'    ? 90 :
+                   Math.round(payload.hesitation_score * 55);
 
   document.getElementById('barAtencao').style.width    = atencao + '%';
   document.getElementById('barAtencaoVal').textContent  = atencao + '%';
@@ -128,17 +121,28 @@ function atualizarMetricas(payload, decisao) {
 &nbsp;&nbsp;<span class="pk">"timestamp": </span><span class="pv-str">"${ts}"</span><br>
 <span class="pk">}</span>`;
 
-  // Decisão da IA
-  const mapaClasse = {
-    'INDECISO':        'indeciso',
-    'QUASE_COMPRANDO': 'comprando',
-    'PRESTES_A_SAIR':  'saindo',
-    'PESQUISANDO':     'pesquisa',
-    'MEDO_DE_ERRAR':   'medo',
+  // Decisão da IA — 5 estados oficiais
+  const corEstado = {
+    idle:     '#4a5a70',
+    engajado: '#00b4ff',
+    indeciso: '#ffd060',
+    decisao:  '#00e5a0',
+    saindo:   '#ff3d5a',
   };
-  const tag     = document.getElementById('profileTag');
-  tag.textContent = '● ' + decisao.perfil.replace(/_/g, ' ');
-  tag.className   = 'profile-tag ' + (mapaClasse[decisao.perfil] || 'pesquisa');
+  const classeEstado = {
+    idle:     'pesquisa',
+    engajado: 'pesquisa',
+    indeciso: 'indeciso',
+    decisao:  'comprando',
+    saindo:   'saindo',
+  };
+
+  const cor    = corEstado[decisao.perfil]    || corEstado.idle;
+  const classe = classeEstado[decisao.perfil] || 'pesquisa';
+
+  const tag = document.getElementById('profileTag');
+  tag.textContent = '● ' + (decisao.perfil || 'idle').toUpperCase();
+  tag.className   = 'profile-tag ' + classe;
 
   document.getElementById('decisionText').textContent = decisao.raciocinio;
   document.getElementById('decisionAction').querySelector('.action-icon').textContent = '💡';
@@ -151,31 +155,27 @@ function atualizarMetricas(payload, decisao) {
   document.getElementById('confidencePct').textContent  = conf + '%';
 
   // Status sensores
-  const temPresenca = payload.presenca;
-  document.getElementById('espDot').className       = 'status-dot ' + (temPresenca ? '' : 'warning');
-  document.getElementById('espStatus').textContent   = temPresenca ? 'ESP32 ATIVO' : 'ESP32 STANDBY';
-  document.getElementById('camDot').className       = 'status-dot ' + (temPresenca ? '' : 'warning');
-  document.getElementById('camStatus').textContent   = temPresenca ? 'CÂMERA ON' : 'CÂMERA PAUSADA';
+  document.getElementById('espDot').className      = 'status-dot ' + (payload.presenca ? '' : 'warning');
+  document.getElementById('espStatus').textContent  = payload.presenca ? 'ESP32 ATIVO'   : 'ESP32 STANDBY';
+  document.getElementById('camDot').className      = 'status-dot ' + (payload.presenca ? '' : 'warning');
+  document.getElementById('camStatus').textContent  = payload.presenca ? 'CÂMERA ON'     : 'CÂMERA PAUSADA';
 
   // Logs
-  addLog('ESP', `presença=${payload.presenca}, postura=${payload.postura}, tempo=${payload.tempo_parado}s`);
+  addLog('CAM', `estado=${payload.estado_estimado}, attn=${payload.attention_score.toFixed(2)}, hes=${payload.hesitation_score.toFixed(2)}`);
   addLog('AI',  `perfil=${decisao.perfil}, conf=${conf}%, ${decisao.latencia_ms}ms`);
 
   // Timeline
-  const tlColor = decisao.urgencia === 'CRITICA' ? '#ff3d5a' :
-                  decisao.urgencia === 'ALTA'     ? '#ff7340' :
-                  decisao.urgencia === 'MEDIA'    ? '#ffd060' : '#00b4ff';
-  addTimeline(decisao.raciocinio, tlColor, 'GROQ / Llama 3.3 70B → OlhoVivo Agent');
+  addTimeline(decisao.raciocinio, cor, 'GROQ / Llama 3.3 70B → OlhoVivo Agent');
 
   // Alerta
-  if (decisao.urgencia === 'CRITICA' || decisao.perfil === 'PRESTES_A_SAIR') {
+  if (decisao.urgencia === 'CRITICA' || decisao.perfil === 'saindo') {
     showAlert(decisao.acao_display);
   }
 
   // Stats
   stats.eventos++;
-  if (decisao.urgencia === 'CRITICA' || decisao.urgencia === 'ALTA') stats.alertas++;
-  if (decisao.perfil === 'QUASE_COMPRANDO') stats.vendas++;
+  if (decisao.urgencia === 'ALTA' || decisao.urgencia === 'CRITICA') stats.alertas++;
+  if (decisao.perfil === 'decisao') stats.vendas++;
   document.getElementById('statEventos').textContent = stats.eventos;
   document.getElementById('statAlertas').textContent = stats.alertas;
   document.getElementById('statVendas').textContent  = stats.vendas;
