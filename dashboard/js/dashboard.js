@@ -64,10 +64,14 @@ function showAlert(text) {
 }
 
 // ── Atualiza métricas na tela ──────────────────────────────
-function atualizarMetricas(payload, decisao) {
+function atualizarMetricas(payload, decisao, landmarks = null) {
 
-  // Wireframe — chama setEstado() do wireframe.js
-  setEstado(payload.estado_estimado);
+  // Wireframe — corpo real se tiver landmarks, pose animada se não tiver
+  if (landmarks) {
+    setLandmarks(landmarks, payload.estado_estimado);
+  } else {
+    setEstado(payload.estado_estimado);
+  }
 
   // Métricas numéricas
   document.getElementById('tempoParado').innerHTML =
