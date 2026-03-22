@@ -21,13 +21,14 @@ class AgenteService:
         self._broadcaster = broadcaster
         self._analytics = analytics
 
-    async def processar(self, evento: EventoSensor, tipo: str = "evento") -> DecisaoIA:
+    async def processar(self, evento: EventoSensor, tipo: str = "evento", landmarks: dict = None) -> DecisaoIA:
         decisao = self._ia.analisar(evento)
 
         mensagem = MensagemWS(
             tipo=tipo,
             payload=evento,
             decisao=decisao,
+            landmarks=landmarks,
         )
 
         await self._broadcaster.broadcast(mensagem)
