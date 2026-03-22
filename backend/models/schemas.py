@@ -53,9 +53,10 @@ class MensagemWS(BaseModel):
     
     # Estrutura enviada via WebSocket para o dashboard.
     
-    tipo: str          # "evento" | "simulacao" | "connected" | "pong"
+    tipo: str          # "evento" | "simulacao" | "camera" | "connected" | "pong"
     payload: Optional[EventoSensor] = None
     decisao: Optional[DecisaoIA] = None
+    landmarks: Optional[dict] = None   # landmarks brutos do MediaPipe
     ts: datetime = Field(default_factory=datetime.now)
 
 

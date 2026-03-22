@@ -3,9 +3,9 @@ import json
 import time
 from groq import Groq
 from dotenv import load_dotenv
-
 from providers.ia_provider import IAProvider
 from models.schemas import EventoSensor, DecisaoIA
+import time
 
 load_dotenv()
 
@@ -71,6 +71,7 @@ class GroqProvider(IAProvider):
 
     def analisar(self, evento: EventoSensor) -> DecisaoIA:
         inicio = time.time()
+        tentativas = 0
 
         try:
             response = self._client.chat.completions.create(
@@ -82,6 +83,11 @@ class GroqProvider(IAProvider):
                 temperature=0.2,
                 max_tokens=300,
             )
+                raw  = response.choices[0].message.content.strip()
+                data = json.loads(raw)
+                data["latencia_ms"] = int((time.time() - inicio) * 1000)
+                data["erro"]        = False
+                return DecisaoIA(**data)
 
             raw  = response.choices[0].message.content.strip()
             data = json.loads(raw)

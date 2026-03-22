@@ -11,7 +11,7 @@ from services.agente import AgenteService
 from routes import evento, simular
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
-
+from routes import evento, simular, camera
 # ─────────────────────────────────────────
 # Instâncias únicas (injeção manual)
 # ─────────────────────────────────────────
@@ -60,6 +60,7 @@ if DASHBOARD_DIR.exists():
 
 app.include_router(evento.criar_router(agente=agente))
 app.include_router(simular.criar_router(agente=agente, sensor=sensor))
+app.include_router(camera.criar_router(agente=agente))
 
 
 
