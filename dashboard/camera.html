@@ -18,8 +18,9 @@
     h1 { font-size:12px; color:var(--cyan); letter-spacing:.12em; text-align:center; }
 
     #videoWrap { position:relative; width:100%; max-width:380px; }
-    video      { width:100%; border-radius:8px; border:1px solid var(--border); display:block; }
-    #poseCanvas{ position:absolute; top:0; left:0; width:100%; height:100%; border-radius:8px; }
+    video      { width:100%; border-radius:8px; border:1px solid var(--border); display:none; }
+    
+   #poseCanvas { position:relative; width:100%; max-width:380px; height:285px; border-radius:8px; border:1px solid var(--border); display:block; }
 
     #estadoBox { width:100%; max-width:380px; background:var(--panel);
                  border:1px solid var(--border); border-radius:8px;
@@ -295,7 +296,8 @@
     function onResults(results) {
       poseCanvas.width  = video.videoWidth  || 640;
       poseCanvas.height = video.videoHeight || 480;
-      poseCtx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
+      poseCtx.fillStyle = '#07090f';
+      poseCtx.fillRect(0, 0, poseCanvas.width, poseCanvas.height);
       if (!results.poseLandmarks) return;
 
       const lm = results.poseLandmarks;
