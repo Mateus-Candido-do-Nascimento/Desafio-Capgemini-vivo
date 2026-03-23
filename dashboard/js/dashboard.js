@@ -9,7 +9,9 @@ let autoMode     = false;
 let autoCycle    = null;
 let autoCycleIdx = 0;
 
-const autoCycleList = ['indeciso','pesquisa','comprando','medo_de_errar','saindo','ausente'];
+// ── Estados oficiais do sistema (5 estados) ────────────────
+// Alinhado com: groq_provider.py, wireframe.js, schemas.py
+const autoCycleList = ['engajado', 'indeciso', 'decisao', 'saindo', 'idle'];
 
 // ── Clock ──────────────────────────────────────────────────
 
@@ -66,66 +68,82 @@ function showAlert(text) {
 // ── Atualiza métricas na tela ──────────────────────────────
 function atualizarMetricas(payload, decisao, landmarks = null) {
 
+  // Guards — protege contra campos null/undefined antes de qualquer operação
+  // Isso evita o crash no .toFixed() e .toUpperCase() quando o payload
+  // chega incompleto (ex: frame de câmera sem todos os campos preenchidos)
+  const attention  = payload.attention_score  ?? 0;
+  const hesitation = payload.hesitation_score ?? 0;
+  const movimento  = payload.movimento        ?? 'baixo';
+  const postura    = payload.postura          ?? 'em_pe';
+  const setor      = payload.setor            ?? 'eletronicos';
+  const estado     = payload.estado_estimado  ?? 'idle';
+  const presenca   = payload.presenca         ?? false;
+  const tempo      = payload.tempo_parado     ?? 0;
+
+  const perfil      = decisao.perfil        ?? 'idle';
+  const confianca   = decisao.confianca     ?? 0;
+  const raciocinio  = decisao.raciocinio    ?? '';
+  const acaoDisplay = decisao.acao_display  ?? '';
+  const acaoVend    = decisao.acao_vendedor ?? '';
+  const urgencia    = decisao.urgencia      ?? 'BAIXA';
+  const latencia    = decisao.latencia_ms   ?? 0;
+
   // Wireframe — corpo real se tiver landmarks, pose animada se não tiver
   if (landmarks) {
-    setLandmarks(landmarks, payload.estado_estimado);
+    setLandmarks(landmarks, estado);
   } else {
-    setEstado(payload.estado_estimado);
+    setEstado(estado);
   }
 
   // Métricas numéricas
   document.getElementById('tempoParado').innerHTML =
-    `${payload.tempo_parado}<span class="metric-unit">s</span>`;
-  document.getElementById('attentionScore').textContent =
-    payload.attention_score.toFixed(2);
-  document.getElementById('hesitationScore').textContent =
-    payload.hesitation_score.toFixed(2);
-  document.getElementById('movimento').textContent =
-    payload.movimento.toUpperCase();
+    `${tempo}<span class="metric-unit">s</span>`;
+  document.getElementById('attentionScore').textContent  = attention.toFixed(2);
+  document.getElementById('hesitationScore').textContent = hesitation.toFixed(2);
+  document.getElementById('movimento').textContent       = movimento.toUpperCase();
 
   document.getElementById('attentionScore').className =
-    `metric-value ${payload.attention_score > 0.7 ? 'green' :
-                    payload.attention_score > 0.4 ? 'cyan' : 'orange'}`;
+    `metric-value ${attention > 0.7 ? 'green' : attention > 0.4 ? 'cyan' : 'orange'}`;
   document.getElementById('hesitationScore').className =
-    `metric-value ${payload.hesitation_score > 0.6 ? 'red' :
-                    payload.hesitation_score > 0.3 ? 'orange' : 'green'}`;
+    `metric-value ${hesitation > 0.6 ? 'red' : hesitation > 0.3 ? 'orange' : 'green'}`;
 
   // Barras
-  const atencao  = Math.round(payload.attention_score * 100);
-  const intencao = decisao.perfil === 'decisao'  ? 88 :
-                   decisao.perfil === 'engajado'  ? 55 :
-                   decisao.perfil === 'indeciso'  ? 35 : 10;
-  const saida    = decisao.perfil === 'saindo'    ? 90 :
-                   Math.round(payload.hesitation_score * 55);
+  const barAtencao  = Math.round(attention * 100);
+  const barIntencao = perfil === 'decisao'  ? 88 :
+                      perfil === 'engajado' ? 55 :
+                      perfil === 'indeciso' ? 35 : 10;
+  const barSaida    = perfil === 'saindo'
+    ? 90
+    : Math.round(hesitation * 55);
 
-  document.getElementById('barAtencao').style.width    = atencao + '%';
-  document.getElementById('barAtencaoVal').textContent  = atencao + '%';
-  document.getElementById('barIntencao').style.width    = intencao + '%';
-  document.getElementById('barIntencaoVal').textContent = intencao + '%';
-  document.getElementById('barSaida').style.width       = saida + '%';
-  document.getElementById('barSaidaVal').textContent    = saida + '%';
+  document.getElementById('barAtencao').style.width     = barAtencao + '%';
+  document.getElementById('barAtencaoVal').textContent  = barAtencao + '%';
+  document.getElementById('barIntencao').style.width    = barIntencao + '%';
+  document.getElementById('barIntencaoVal').textContent = barIntencao + '%';
+  document.getElementById('barSaida').style.width       = barSaida + '%';
+  document.getElementById('barSaidaVal').textContent    = barSaida + '%';
 
   // Payload display
-  document.getElementById('pSetor').textContent    = `"${payload.setor}"`;
-  document.getElementById('pPostura').textContent  = `"${payload.postura}"`;
-  document.getElementById('pEstado').textContent   = `"${payload.estado_estimado}"`;
-  document.getElementById('pPresenca').textContent = payload.presenca ? 'true' : 'false';
+  document.getElementById('pSetor').textContent    = `"${setor}"`;
+  document.getElementById('pPostura').textContent  = `"${postura}"`;
+  document.getElementById('pEstado').textContent   = `"${estado}"`;
+  document.getElementById('pPresenca').textContent = presenca ? 'true' : 'false';
 
   const ts = new Date().toISOString().slice(0, 19);
   document.getElementById('payloadDisplay').innerHTML = `
 <span class="pk">{</span><br>
-&nbsp;&nbsp;<span class="pk">"setor": </span><span class="pv-str">"${payload.setor}"</span>,<br>
-&nbsp;&nbsp;<span class="pk">"presenca": </span><span class="pv-bool">${payload.presenca}</span>,<br>
-&nbsp;&nbsp;<span class="pk">"tempo_parado": </span><span class="pv-num">${payload.tempo_parado}</span>,<br>
-&nbsp;&nbsp;<span class="pk">"movimento": </span><span class="pv-str">"${payload.movimento}"</span>,<br>
-&nbsp;&nbsp;<span class="pk">"postura": </span><span class="pv-str">"${payload.postura}"</span>,<br>
-&nbsp;&nbsp;<span class="pk">"estado_estimado": </span><span class="pv-str">"${payload.estado_estimado}"</span>,<br>
-&nbsp;&nbsp;<span class="pk">"attention_score": </span><span class="pv-num">${payload.attention_score.toFixed(2)}</span>,<br>
-&nbsp;&nbsp;<span class="pk">"hesitation_score": </span><span class="pv-num">${payload.hesitation_score.toFixed(2)}</span>,<br>
+&nbsp;&nbsp;<span class="pk">"setor": </span><span class="pv-str">"${setor}"</span>,<br>
+&nbsp;&nbsp;<span class="pk">"presenca": </span><span class="pv-bool">${presenca}</span>,<br>
+&nbsp;&nbsp;<span class="pk">"tempo_parado": </span><span class="pv-num">${tempo}</span>,<br>
+&nbsp;&nbsp;<span class="pk">"movimento": </span><span class="pv-str">"${movimento}"</span>,<br>
+&nbsp;&nbsp;<span class="pk">"postura": </span><span class="pv-str">"${postura}"</span>,<br>
+&nbsp;&nbsp;<span class="pk">"estado_estimado": </span><span class="pv-str">"${estado}"</span>,<br>
+&nbsp;&nbsp;<span class="pk">"attention_score": </span><span class="pv-num">${attention.toFixed(2)}</span>,<br>
+&nbsp;&nbsp;<span class="pk">"hesitation_score": </span><span class="pv-num">${hesitation.toFixed(2)}</span>,<br>
 &nbsp;&nbsp;<span class="pk">"timestamp": </span><span class="pv-str">"${ts}"</span><br>
 <span class="pk">}</span>`;
 
-  // Decisão da IA — 5 estados oficiais
+  // Decisão da IA — mapeamento dos 5 estados oficiais
   const corEstado = {
     idle:     '#4a5a70',
     engajado: '#00b4ff',
@@ -141,45 +159,45 @@ function atualizarMetricas(payload, decisao, landmarks = null) {
     saindo:   'saindo',
   };
 
-  const cor    = corEstado[decisao.perfil]    || corEstado.idle;
-  const classe = classeEstado[decisao.perfil] || 'pesquisa';
+  const cor    = corEstado[perfil]    || corEstado.idle;
+  const classe = classeEstado[perfil] || 'pesquisa';
 
   const tag = document.getElementById('profileTag');
-  tag.textContent = '● ' + (decisao.perfil || 'idle').toUpperCase();
+  tag.textContent = '● ' + perfil.toUpperCase();
   tag.className   = 'profile-tag ' + classe;
 
-  document.getElementById('decisionText').textContent = decisao.raciocinio;
+  document.getElementById('decisionText').textContent = raciocinio;
   document.getElementById('decisionAction').querySelector('.action-icon').textContent = '💡';
-  document.getElementById('actionText').textContent   = decisao.acao_vendedor;
+  document.getElementById('actionText').textContent   = acaoVend;
   document.getElementById('decisionTs').textContent   = getTime();
-  document.getElementById('latencyBadge').textContent = decisao.latencia_ms + 'ms';
+  document.getElementById('latencyBadge').textContent = latencia + 'ms';
 
-  const conf = Math.round(decisao.confianca * 100);
+  const conf = Math.round(confianca * 100);
   document.getElementById('confidenceFill').style.width = conf + '%';
   document.getElementById('confidencePct').textContent  = conf + '%';
 
   // Status sensores
-  document.getElementById('espDot').className      = 'status-dot ' + (payload.presenca ? '' : 'warning');
-  document.getElementById('espStatus').textContent  = payload.presenca ? 'ESP32 ATIVO'   : 'ESP32 STANDBY';
-  document.getElementById('camDot').className      = 'status-dot ' + (payload.presenca ? '' : 'warning');
-  document.getElementById('camStatus').textContent  = payload.presenca ? 'CÂMERA ON'     : 'CÂMERA PAUSADA';
+  document.getElementById('espDot').className      = 'status-dot ' + (presenca ? '' : 'warning');
+  document.getElementById('espStatus').textContent  = presenca ? 'ESP32 ATIVO'   : 'ESP32 STANDBY';
+  document.getElementById('camDot').className      = 'status-dot ' + (presenca ? '' : 'warning');
+  document.getElementById('camStatus').textContent  = presenca ? 'CÂMERA ON'     : 'CÂMERA PAUSADA';
 
   // Logs
-  addLog('CAM', `estado=${payload.estado_estimado}, attn=${payload.attention_score.toFixed(2)}, hes=${payload.hesitation_score.toFixed(2)}`);
-  addLog('AI',  `perfil=${decisao.perfil}, conf=${conf}%, ${decisao.latencia_ms}ms`);
+  addLog('CAM', `estado=${estado}, attn=${attention.toFixed(2)}, hes=${hesitation.toFixed(2)}`);
+  addLog('AI',  `perfil=${perfil}, conf=${conf}%, ${latencia}ms`);
 
   // Timeline
-  addTimeline(decisao.raciocinio, cor, 'GROQ / Llama 3.3 70B → OlhoVivo Agent');
+  addTimeline(raciocinio, cor, 'GROQ / Llama 3.3 70B → OlhoVivo Agent');
 
-  // Alerta
-  if (decisao.urgencia === 'CRITICA' || decisao.perfil === 'saindo') {
-    showAlert(decisao.acao_display);
+  // Alerta para estados críticos
+  if (urgencia === 'CRITICA' || perfil === 'saindo') {
+    showAlert(acaoDisplay);
   }
 
   // Stats
   stats.eventos++;
-  if (decisao.urgencia === 'ALTA' || decisao.urgencia === 'CRITICA') stats.alertas++;
-  if (decisao.perfil === 'decisao') stats.vendas++;
+  if (urgencia === 'ALTA' || urgencia === 'CRITICA') stats.alertas++;
+  if (perfil === 'decisao') stats.vendas++;
   document.getElementById('statEventos').textContent = stats.eventos;
   document.getElementById('statAlertas').textContent = stats.alertas;
   document.getElementById('statVendas').textContent  = stats.vendas;
@@ -192,7 +210,7 @@ function toggleAuto() {
   document.getElementById('autoToggle').classList.toggle('on', autoMode);
   if (autoMode) {
     autoCycle = setInterval(() => {
-      fetch(`http://localhost:8000/simular/${autoCycleList[autoCycleIdx % autoCycleList.length]}`)
+      fetch(`http://localhost:8000/simular/${autoCycleList[autoCycleIdx % autoCycleList.length]}`);
       autoCycleIdx++;
     }, 8000);
   } else {
@@ -201,6 +219,15 @@ function toggleAuto() {
 }
 
 // ── Botões do simulador ────────────────────────────────────
+// Mapeamento: nome do botão no HTML → estado oficial do sistema
+const _ALIAS_CENARIO = {
+  indeciso:     'indeciso',
+  comprando:    'decisao',
+  saindo:       'saindo',
+  pesquisa:     'engajado',
+  medo_de_errar:'indeciso',
+  ausente:      'idle',
+};
 
 function triggerScenario(cenario) {
   document.querySelectorAll('.scenario-btn').forEach(b => b.classList.remove('active'));
@@ -208,8 +235,10 @@ function triggerScenario(cenario) {
   const idx  = btns.indexOf(cenario);
   if (idx >= 0) document.querySelectorAll('.scenario-btn')[idx].classList.add('active');
 
-  fetch(`http://localhost:8000/simular/${cenario}`)
-    .catch(() => addLog('SYS', `Erro ao chamar /simular/${cenario} — backend online?`));
+  // Traduz cenário legado para estado oficial antes de chamar o backend
+  const cenarioNormalizado = _ALIAS_CENARIO[cenario] || cenario;
+  fetch(`http://localhost:8000/simular/${cenarioNormalizado}`)
+    .catch(() => addLog('SYS', `Erro ao chamar /simular/${cenarioNormalizado} — backend online?`));
 }
 
 // ── Boot ───────────────────────────────────────────────────
