@@ -6,9 +6,12 @@ from services.analytics import AnalyticsService
 
 class AgenteService:
     """
-    Orquestra o ciclo completo: evento → IA → broadcast → analytics.
-    Não sabe qual IA está sendo usada, nem como o WS funciona.
-    Depende de abstrações (IAProvider), não de implementações (Groq).
+    Orquestra o ciclo: evento → IA → broadcast → analytics.
+
+    Otimização de tokens:
+      - Só faz broadcast completo quando o estado muda
+      - Estado idle não aciona a IA (tratado no GroqProvider)
+      - Mantém último estado para comparação
     """
 
     def __init__(
@@ -17,21 +20,36 @@ class AgenteService:
         broadcaster: BroadcasterService,
         analytics: AnalyticsService,
     ):
-        self._ia = ia
+        self._ia          = ia
         self._broadcaster = broadcaster
-        self._analytics = analytics
+        self._analytics   = analytics
+        self._ultimo_estado_broadcast: str = "idle"
 
-    async def processar(self, evento: EventoSensor, tipo: str = "evento", landmarks: dict = None) -> DecisaoIA:
+    async def processar(
+        self,
+        evento: EventoSensor,
+        tipo: str = "evento",
+        landmarks: dict = None,
+    ) -> DecisaoIA:
+
         decisao = self._ia.analisar(evento)
 
-        mensagem = MensagemWS(
-            tipo=tipo,
-            payload=evento,
-            decisao=decisao,
-            landmarks=landmarks,
-        )
+        # Só faz broadcast e salva analytics quando há mudança de estado
+        # ou quando o estado é urgente (decisao / saindo)
+        estado_atual = evento.estado_estimado
+        mudou        = estado_atual != self._ultimo_estado_broadcast
+        urgente      = estado_atual in ("decisao", "saindo")
 
-        await self._broadcaster.broadcast(mensagem)
-        self._analytics.salvar(evento, decisao)
+        if mudou or urgente:
+            self._ultimo_estado_broadcast = estado_atual
+
+            mensagem = MensagemWS(
+                tipo     = tipo,
+                payload  = evento,
+                decisao  = decisao,
+                landmarks= landmarks,
+            )
+            await self._broadcaster.broadcast(mensagem)
+            self._analytics.salvar(evento, decisao)
 
         return decisao
