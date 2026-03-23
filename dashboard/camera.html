@@ -17,10 +17,30 @@
            align-items:center; padding:12px; gap:10px; }
     h1 { font-size:12px; color:var(--cyan); letter-spacing:.12em; text-align:center; }
 
-    #videoWrap { position:relative; width:100%; max-width:380px; }
-    video      { width:100%; border-radius:8px; border:1px solid var(--border); display:none; }
-    
-   #poseCanvas { position:relative; width:100%; max-width:380px; height:285px; border-radius:8px; border:1px solid var(--border); display:block; }
+    /* ── videoWrap: container relativo para empilhar video + canvas ── */
+    #videoWrap {
+      position: relative;
+      width: 100%;
+      max-width: 380px;
+      aspect-ratio: 4/3;          /* reserva espaço antes do stream carregar */
+      background: #07090f;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+    /* video escondido — só fornece frames pro MediaPipe */
+    #video {
+      position: absolute;
+      width: 1px; height: 1px;
+      opacity: 0; pointer-events: none;
+    }
+    /* canvas ocupa todo o wrap — skeleton visível, fundo preto */
+    #poseCanvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      display: block;
+    }
 
     #estadoBox { width:100%; max-width:380px; background:var(--panel);
                  border:1px solid var(--border); border-radius:8px;
@@ -46,12 +66,6 @@
     #statusRow { width:100%; max-width:380px; display:flex; justify-content:space-between; font-size:10px; color:var(--dim); }
     #statusRow span { color:var(--cyan); }
 
-    #btnStart { width:100%; max-width:380px; padding:14px;
-                background:rgba(0,180,255,.08); border:1px solid var(--cyan);
-                border-radius:8px; color:var(--cyan); font-family:monospace;
-                font-size:13px; letter-spacing:.1em; cursor:pointer; }
-    #btnStart:active { background:rgba(0,180,255,.18); }
-
     #backendConfig { width:100%; max-width:380px; display:flex; gap:8px; align-items:center; }
     #backendInput  { flex:1; background:var(--panel); border:1px solid var(--border);
                      border-radius:6px; color:#c8d6e5; font-family:monospace;
@@ -72,6 +86,7 @@
 
   <h1>⬡ OLHOVIVO AI — SENSOR VISUAL</h1>
 
+  <!-- video DENTRO do wrap — canvas sobrepõe corretamente -->
   <div id="videoWrap">
     <video id="video" playsinline autoplay muted></video>
     <canvas id="poseCanvas"></canvas>
@@ -165,6 +180,36 @@
     const INTERVALO_MS = 2000;
     const CORES = { idle:'#4a5a70', engajado:'#00b4ff', indeciso:'#ffd060', decisao:'#00e5a0', saindo:'#ff3d5a' };
 
+    // ── Elementos DOM — resolvidos uma vez, nunca mais getElementById no loop ──
+    // Isso elimina o "Cannot set properties of null" quando o loop
+    // dispara antes do DOM estar pronto, e evita buscas repetidas no hot path
+    const EL = {
+      video:          document.getElementById('video'),
+      poseCanvas:     document.getElementById('poseCanvas'),
+      estadoAtual:    document.getElementById('estadoAtual'),
+      confiancaBadge: document.getElementById('confiancaBadge'),
+      frameCount:     document.getElementById('frameCount'),
+      statusTxt:      document.getElementById('statusTxt'),
+      intervaloTxt:   document.getElementById('intervaloTxt'),
+      backendInput:   document.getElementById('backendInput'),
+      log:            document.getElementById('log'),
+      v_lean:         document.getElementById('v_lean'),
+      v_sdx:          document.getElementById('v_sdx'),
+      v_arm:          document.getElementById('v_arm'),
+      v_head:         document.getElementById('v_head'),
+      v_att:          document.getElementById('v_att'),
+      v_hes:          document.getElementById('v_hes'),
+      v_vis:          document.getElementById('v_vis'),
+      v_estado_local:   document.getElementById('v_estado_local'),
+      v_estado_backend: document.getElementById('v_estado_backend'),
+      b_lean: document.getElementById('b_lean'),
+      b_sdx:  document.getElementById('b_sdx'),
+      b_att:  document.getElementById('b_att'),
+      b_hes:  document.getElementById('b_hes'),
+    };
+
+    const poseCtx = EL.poseCanvas.getContext('2d');
+
     function detectarBackend() {
       const salvo = localStorage.getItem('olhovivo_backend');
       if (salvo) return salvo;
@@ -175,40 +220,34 @@
     }
 
     let BACKEND = detectarBackend();
-    document.getElementById('backendInput').value = BACKEND;
+    EL.backendInput.value = BACKEND;
 
     function salvarBackend() {
-      BACKEND = document.getElementById('backendInput').value.trim().replace(/\/$/, '');
+      BACKEND = EL.backendInput.value.trim().replace(/\/$/, '');
       localStorage.setItem('olhovivo_backend', BACKEND);
       log('Backend salvo: ' + BACKEND, 'info');
     }
 
-    const video      = document.getElementById('video');
-    const poseCanvas = document.getElementById('poseCanvas');
-    const poseCtx    = poseCanvas.getContext('2d');
     let frameCount = 0, enviando = false, ultimoEnvio = 0;
 
     function log(msg, tipo = '') {
       const el = document.createElement('div');
       el.className = tipo ? 'log-' + tipo : '';
       el.textContent = new Date().toTimeString().slice(0,8) + '  ' + msg;
-      const logEl = document.getElementById('log');
-      logEl.insertBefore(el, logEl.firstChild);
-      if (logEl.children.length > 25) logEl.removeChild(logEl.lastChild);
+      EL.log.insertBefore(el, EL.log.firstChild);
+      if (EL.log.children.length > 25) EL.log.removeChild(EL.log.lastChild);
     }
 
-    // Espelha _inferir_estado do backend — câmera FRONTAL
     function inferirLocal(l) {
       const shoulder_y  = ((l[11]?.y ?? 0.4) + (l[12]?.y ?? 0.4)) / 2;
       const hip_y       = ((l[23]?.y ?? 0.6) + (l[24]?.y ?? 0.6)) / 2;
-      const lean_front  = shoulder_y - hip_y;  // negativo em câmera frontal
+      const lean_front  = shoulder_y - hip_y;
       const shoulder_dx = Math.abs((l[11]?.x ?? 0.4) - (l[12]?.x ?? 0.6));
       const wrist_y_avg = ((l[15]?.y ?? 0.6) + (l[16]?.y ?? 0.6)) / 2;
       const arm_raised  = wrist_y_avg < shoulder_y;
-      const head_down   = (l[0]?.y ?? 0.5) > shoulder_y - 0.08;  // threshold generoso
+      const head_down   = (l[0]?.y ?? 0.5) > shoulder_y - 0.08;
       const visibility  = l[11]?.visibility ?? 1.0;
 
-      // attention: shoulder_dx alto = de frente = engajado
       const attention  = Math.min(1, Math.max(0,
         0.3 + shoulder_dx * 1.2 + (arm_raised ? 0.25 : 0) + (head_down ? 0.1 : 0)
       ));
@@ -227,24 +266,24 @@
 
     function atualizarDebug(m) {
       const fmt = v => v.toFixed(3);
-      document.getElementById('v_lean').textContent = fmt(m.lean_front);
-      document.getElementById('v_sdx').textContent  = fmt(m.shoulder_dx);
-      document.getElementById('v_arm').textContent  = m.arm_raised ? 'SIM' : 'NÃO';
-      document.getElementById('v_arm').className    = 'debug-val ' + (m.arm_raised ? 'good' : '');
-      document.getElementById('v_head').textContent = m.head_down ? 'SIM' : 'NÃO';
-      document.getElementById('v_vis').textContent  = fmt(m.visibility);
-      document.getElementById('v_att').textContent  = Math.round(m.attention  * 100) + '%';
-      document.getElementById('v_hes').textContent  = Math.round(m.hesitation * 100) + '%';
-      document.getElementById('v_estado_local').textContent = m.estado.toUpperCase();
-      document.getElementById('v_estado_local').style.color = CORES[m.estado] || '#4a5a70';
+      // Usa EL em vez de getElementById — nunca retorna null
+      EL.v_lean.textContent = fmt(m.lean_front);
+      EL.v_sdx.textContent  = fmt(m.shoulder_dx);
+      EL.v_arm.textContent  = m.arm_raised ? 'SIM' : 'NÃO';
+      EL.v_arm.className    = 'debug-val ' + (m.arm_raised ? 'good' : '');
+      EL.v_head.textContent = m.head_down ? 'SIM' : 'NÃO';
+      EL.v_vis.textContent  = fmt(m.visibility);
+      EL.v_att.textContent  = Math.round(m.attention  * 100) + '%';
+      EL.v_hes.textContent  = Math.round(m.hesitation * 100) + '%';
+      EL.v_estado_local.textContent = m.estado.toUpperCase();
+      EL.v_estado_local.style.color = CORES[m.estado] || '#4a5a70';
 
-      document.getElementById('b_lean').style.width = Math.min(100, Math.max(0, (m.lean_front + 0.2) / 0.4 * 100)) + '%';
-      document.getElementById('b_sdx').style.width  = Math.min(100, m.shoulder_dx / 0.5 * 100) + '%';
-      document.getElementById('b_att').style.width  = (m.attention  * 100) + '%';
-      document.getElementById('b_hes').style.width  = (m.hesitation * 100) + '%';
+      EL.b_lean.style.width = Math.min(100, Math.max(0, (m.lean_front + 0.2) / 0.4 * 100)) + '%';
+      EL.b_sdx.style.width  = Math.min(100, m.shoulder_dx / 0.5 * 100) + '%';
+      EL.b_att.style.width  = (m.attention  * 100) + '%';
+      EL.b_hes.style.width  = (m.hesitation * 100) + '%';
     }
 
-    // Clamp garante 0.0–1.0 — MediaPipe pode retornar fora do range
     const cl = v => Math.min(1.0, Math.max(0.0, v ?? 0.5));
 
     function extrairBody(l) {
@@ -264,7 +303,7 @@
       if (enviando) return;
       enviando = true;
       try {
-        const res  = await fetch(`${BACKEND}/sensor/frame`, {
+        const res = await fetch(`${BACKEND}/sensor/frame`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(extrairBody(landmarks)),
         });
@@ -272,21 +311,21 @@
         const data = await res.json();
 
         frameCount++;
-        document.getElementById('frameCount').textContent = frameCount;
+        EL.frameCount.textContent = frameCount;
 
         const estado = data.estado || 'idle';
         const conf   = data.decisao?.confianca ?? 0;
-        document.getElementById('estadoAtual').textContent = estado.toUpperCase();
-        document.getElementById('estadoAtual').style.color = CORES[estado] || '#4a5a70';
-        document.getElementById('confiancaBadge').innerHTML = `CONF ${Math.round(conf * 100)}%<br>frames: ${frameCount}`;
-        document.getElementById('v_estado_backend').textContent  = estado.toUpperCase();
-        document.getElementById('v_estado_backend').style.color  = CORES[estado] || '#4a5a70';
-        document.getElementById('statusTxt').textContent = 'transmitindo';
-        document.getElementById('statusTxt').style.color = '#00e5a0';
+        EL.estadoAtual.textContent    = estado.toUpperCase();
+        EL.estadoAtual.style.color    = CORES[estado] || '#4a5a70';
+        EL.confiancaBadge.innerHTML   = `CONF ${Math.round(conf * 100)}%<br>frames: ${frameCount}`;
+        EL.v_estado_backend.textContent = estado.toUpperCase();
+        EL.v_estado_backend.style.color = CORES[estado] || '#4a5a70';
+        EL.statusTxt.textContent      = 'transmitindo';
+        EL.statusTxt.style.color      = '#00e5a0';
         log(`↑ ${estado} | conf=${Math.round(conf*100)}%`, 'ok');
       } catch (err) {
-        document.getElementById('statusTxt').textContent = 'erro';
-        document.getElementById('statusTxt').style.color = '#ff3d5a';
+        EL.statusTxt.textContent = 'erro';
+        EL.statusTxt.style.color = '#ff3d5a';
         log(`ERRO: ${err.message}`, 'err');
       } finally {
         enviando = false;
@@ -294,17 +333,19 @@
     }
 
     function onResults(results) {
-      poseCanvas.width  = video.videoWidth  || 640;
-      poseCanvas.height = video.videoHeight || 480;
+      // Dimensiona o canvas pelo tamanho real do vídeo
+      // Fallback 640x480 garante que o canvas nunca colapsa para 0x0
+      EL.poseCanvas.width  = EL.video.videoWidth  || 640;
+      EL.poseCanvas.height = EL.video.videoHeight || 480;
       poseCtx.fillStyle = '#07090f';
-      poseCtx.fillRect(0, 0, poseCanvas.width, poseCanvas.height);
+      poseCtx.fillRect(0, 0, EL.poseCanvas.width, EL.poseCanvas.height);
       if (!results.poseLandmarks) return;
 
       const lm = results.poseLandmarks;
       drawConnectors(poseCtx, lm, POSE_CONNECTIONS, { color:'rgba(0,180,255,0.55)', lineWidth:2 });
       drawLandmarks(poseCtx, lm, { color:'rgba(0,229,160,0.9)', lineWidth:1, radius:3 });
 
-      atualizarDebug(inferirLocal(lm));   // ← atualiza painel SEM esperar backend
+      atualizarDebug(inferirLocal(lm));
 
       const agora = Date.now();
       if (agora - ultimoEnvio < INTERVALO_MS) return;
@@ -312,57 +353,50 @@
       enviarFrame(lm);
     }
 
-    let cameraAtiva = null;   // stream atual
+    let cameraAtiva = null;
 
     function setActiveBtn(modo) {
       const f = document.getElementById('btnFrontal');
       const t = document.getElementById('btnTraseira');
-      f.style.background = modo === 'user'        ? 'rgba(0,180,255,.18)' : 'rgba(0,180,255,.04)';
-      f.style.color      = modo === 'user'        ? 'var(--cyan)'          : '#4a5a70';
-      f.style.borderColor= modo === 'user'        ? 'var(--cyan)'          : 'rgba(0,180,255,.3)';
-      t.style.background = modo === 'environment' ? 'rgba(0,180,255,.18)' : 'rgba(0,180,255,.04)';
-      t.style.color      = modo === 'environment' ? 'var(--cyan)'          : '#4a5a70';
-      t.style.borderColor= modo === 'environment' ? 'var(--cyan)'          : 'rgba(0,180,255,.3)';
+      f.style.background  = modo === 'user'        ? 'rgba(0,180,255,.18)' : 'rgba(0,180,255,.04)';
+      f.style.color       = modo === 'user'        ? 'var(--cyan)'          : '#4a5a70';
+      f.style.borderColor = modo === 'user'        ? 'var(--cyan)'          : 'rgba(0,180,255,.3)';
+      t.style.background  = modo === 'environment' ? 'rgba(0,180,255,.18)' : 'rgba(0,180,255,.04)';
+      t.style.color       = modo === 'environment' ? 'var(--cyan)'          : '#4a5a70';
+      t.style.borderColor = modo === 'environment' ? 'var(--cyan)'          : 'rgba(0,180,255,.3)';
     }
 
     async function iniciar(facingMode = 'user') {
-      // Para stream anterior se existir
       if (cameraAtiva) { cameraAtiva.getTracks().forEach(t => t.stop()); cameraAtiva = null; }
       setActiveBtn(facingMode);
-      document.getElementById('statusTxt').textContent  = 'iniciando...';
+      EL.statusTxt.textContent = 'iniciando...';
 
-      // getUserMedia — frontal por padrao, traseira como fallback
       let stream = null;
       const tentativas = [
-        { video: { facingMode: { ideal: 'user' } }, audio: false },
-        { video: { facingMode: { ideal: 'environment' } }, audio: false },
+        { video: { facingMode: { ideal: facingMode } }, audio: false },
+        { video: { facingMode: { ideal: 'user'      } }, audio: false },
         { video: true, audio: false },
       ];
       for (const constraints of tentativas) {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia(constraints);
-          break;
-        } catch (e) {
-          log('Tentativa falhou: ' + e.message, 'err');
-        }
+        try { stream = await navigator.mediaDevices.getUserMedia(constraints); break; }
+        catch (e) { log('Tentativa falhou: ' + e.message, 'err'); }
       }
       if (!stream) {
-        log('Nenhuma camera disponivel', 'err');
+        log('Nenhuma câmera disponível', 'err');
         setActiveBtn(null);
         return;
       }
-      video.srcObject = stream;
-      video.setAttribute('playsinline', true);
-      await new Promise(resolve => { video.onloadedmetadata = resolve; });
-      await video.play();
-      log('Stream ativo — video visivel', 'ok');
 
-      // Esconde canvas ate MP confirmar que esta rodando
-      poseCanvas.style.display = 'none';
+      cameraAtiva = stream;
+      EL.video.srcObject = stream;
+      EL.video.setAttribute('playsinline', true);
+      await new Promise(resolve => { EL.video.onloadedmetadata = resolve; });
+      await EL.video.play();
+      log('Stream ativo', 'ok');
 
       const pose = new Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
       pose.setOptions({
-        modelComplexity:        0,     // 0 = lite, muito mais rapido no mobile
+        modelComplexity:        0,
         smoothLandmarks:        true,
         enableSegmentation:     false,
         minDetectionConfidence: 0.5,
@@ -373,32 +407,29 @@
       pose.onResults((results) => {
         if (!poseOk) {
           poseOk = true;
-          poseCanvas.style.display = 'block';
           log('Pose pronto', 'ok');
         }
         onResults(results);
       });
 
-      // Dispara o primeiro envio pra forcar o WASM a inicializar
       try {
-        await pose.send({ image: video });
+        await pose.send({ image: EL.video });
         log('Modelo carregando...', 'info');
       } catch (err) {
         log('Pose init: ' + err.message, 'err');
       }
 
       async function loop() {
-        if (video.readyState >= 2) {
-          try { await pose.send({ image: video }); } catch (_) {}
+        if (EL.video.readyState >= 2) {
+          try { await pose.send({ image: EL.video }); } catch (_) {}
         }
         requestAnimationFrame(loop);
       }
       loop();
 
-      document.getElementById('statusTxt').textContent = 'camera ativa';
-      document.getElementById('statusTxt').style.color = '#00b4ff';
-      document.getElementById('intervaloTxt').textContent = INTERVALO_MS + 'ms';
-
+      EL.statusTxt.textContent   = 'câmera ativa';
+      EL.statusTxt.style.color   = '#00b4ff';
+      EL.intervaloTxt.textContent = INTERVALO_MS + 'ms';
       log('MediaPipe Pose iniciado', 'info');
       log('Backend: ' + BACKEND, 'info');
     }
