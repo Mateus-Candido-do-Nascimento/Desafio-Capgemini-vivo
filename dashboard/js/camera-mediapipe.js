@@ -1,31 +1,43 @@
 // ═══════════════════════════════════════════════════════════
-// CAMERA-MEDIAPIPE — controle da câmera e integração MediaPipe
-// Responsabilidade: captura de vídeo e processamento de landmarks
+// CAMERA-MEDIAPIPE — Pose + FaceMesh em loop único alternado
+// Pose roda 9 frames, FaceMesh roda 1 frame, repete
+// Nunca processam ao mesmo tempo → não estoura memória
 // ═══════════════════════════════════════════════════════════
 
-let cameraAtiva = null;
+let cameraAtiva  = null;
+let poseModelo   = null;
+let faceModelo   = null;
+let ultimoFace   = null;
+let frameIdx     = 0;
+const FACE_CADA  = 5;    // a cada 5 frames, 1 vai pro FaceMesh
 
-function onResults(results) {
+// ── Pose callback ────────────────────────────────────────
+function onPoseResults(results) {
   EL.poseCanvas.width  = EL.video.videoWidth  || 640;
   EL.poseCanvas.height = EL.video.videoHeight || 480;
   poseCtx.fillStyle = '#07090f';
   poseCtx.fillRect(0, 0, EL.poseCanvas.width, EL.poseCanvas.height);
   if (!results.poseLandmarks) return;
 
-  const lm   = results.poseLandmarks;
-  const face = results.faceLandmarks || null;
+  const lm = results.poseLandmarks;
 
   // Corpo
   drawConnectors(poseCtx, lm, POSE_CONNECTIONS, { color:'rgba(0,180,255,0.55)', lineWidth:2 });
   drawLandmarks(poseCtx, lm, { color:'rgba(0,229,160,0.9)', lineWidth:1, radius:3 });
 
-  // Face mesh
-  if (face) {
-    drawConnectors(poseCtx, face, FACEMESH_TESSELATION, { color:'rgba(0,180,255,0.15)', lineWidth:0.5 });
-    drawConnectors(poseCtx, face, FACEMESH_FACE_OVAL,   { color:'rgba(0,180,255,0.3)',  lineWidth:1 });
+  // Sobrepõe face mesh do último resultado (se tiver)
+  if (ultimoFace) {
+    drawConnectors(poseCtx, ultimoFace, FACEMESH_TESSELATION, { color:'rgba(0,180,255,0.12)', lineWidth:0.5 });
+    drawConnectors(poseCtx, ultimoFace, FACEMESH_FACE_OVAL,   { color:'rgba(0,180,255,0.25)', lineWidth:1 });
   }
 
   atualizarDebug(inferirLocal(lm));
+
+  // Métricas faciais do último FaceMesh
+  const faceMetrics = inferirFace(ultimoFace);
+  if (faceMetrics) {
+    console.log('FACE:', faceMetrics);
+  }
 
   const agora = Date.now();
   if (agora - ultimoEnvio < INTERVALO_MS) return;
@@ -33,6 +45,35 @@ function onResults(results) {
   enviarFrame(lm);
 }
 
+// ── FaceMesh callback ────────────────────────────────────
+function onFaceResults(results) {
+  if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+    ultimoFace = results.multiFaceLandmarks[0];
+  }
+}
+
+// ── Loop único alternado ─────────────────────────────────
+async function loop() {
+  if (EL.video.readyState < 2) {
+    requestAnimationFrame(loop);
+    return;
+  }
+
+  try {
+    if (frameIdx % FACE_CADA === 0 && faceModelo) {
+      // Frame do FaceMesh (1 a cada FACE_CADA)
+      await faceModelo.send({ image: EL.video });
+    } else if (poseModelo) {
+      // Frame do Pose (os outros 9)
+      await poseModelo.send({ image: EL.video });
+    }
+  } catch (_) {}
+
+  frameIdx++;
+  requestAnimationFrame(loop);
+}
+
+// ── Botões câmera ────────────────────────────────────────
 function setActiveBtn(modo) {
   const f = document.getElementById('btnFrontal');
   const t = document.getElementById('btnTraseira');
@@ -44,6 +85,7 @@ function setActiveBtn(modo) {
   t.style.borderColor = modo === 'environment' ? 'var(--cyan)'          : 'rgba(0,180,255,.3)';
 }
 
+// ── Iniciar ──────────────────────────────────────────────
 async function iniciar(facingMode = 'user') {
   if (cameraAtiva) { cameraAtiva.getTracks().forEach(t => t.stop()); cameraAtiva = null; }
   setActiveBtn(facingMode);
@@ -72,42 +114,58 @@ async function iniciar(facingMode = 'user') {
   await EL.video.play();
   log('Stream ativo', 'ok');
 
-  const holistic = new Holistic({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${f}` });
-  holistic.setOptions({
-    modelComplexity:        1,
+  // ── Pose ──
+  poseModelo = new Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
+  poseModelo.setOptions({
+    modelComplexity:        0,
     smoothLandmarks:        true,
-    refineFaceLandmarks:    true,
+    enableSegmentation:     false,
     minDetectionConfidence: 0.5,
     minTrackingConfidence:  0.5,
   });
-
   let poseOk = false;
-  holistic.onResults((results) => {
-    if (!poseOk) {
-      poseOk = true;
-      log('Holistic pronto', 'ok');
-    }
-    onResults(results);
+  poseModelo.onResults((results) => {
+    if (!poseOk) { poseOk = true; log('Pose pronto', 'ok'); }
+    onPoseResults(results);
   });
 
+  // ── FaceMesh ──
+  faceModelo = new FaceMesh({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}` });
+  faceModelo.setOptions({
+    maxNumFaces:            1,
+    refineLandmarks:        true,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence:  0.5,
+  });
+  let faceOk = false;
+  faceModelo.onResults((results) => {
+    if (!faceOk) { faceOk = true; log('FaceMesh pronto', 'ok'); }
+    onFaceResults(results);
+  });
+
+  // Inicializa Pose primeiro
   try {
-    await holistic.send({ image: EL.video });
-    log('Modelo carregando...', 'info');
+    await poseModelo.send({ image: EL.video });
+    log('Pose carregando...', 'info');
   } catch (err) {
-    log('Holistic init: ' + err.message, 'err');
+    log('Pose init: ' + err.message, 'err');
   }
 
-  async function loop() {
-    if (EL.video.readyState >= 2) {
-      try { await holistic.send({ image: EL.video }); } catch (_) {}
-    }
-    requestAnimationFrame(loop);
+  // Depois FaceMesh (1 frame pra carregar o modelo)
+  try {
+    await faceModelo.send({ image: EL.video });
+    log('FaceMesh carregando...', 'info');
+  } catch (err) {
+    log('FaceMesh init: ' + err.message, 'err');
   }
+
+  // Loop único
+  frameIdx = 0;
   loop();
 
-  EL.statusTxt.textContent   = 'câmera ativa';
-  EL.statusTxt.style.color   = '#00b4ff';
+  EL.statusTxt.textContent    = 'câmera ativa';
+  EL.statusTxt.style.color    = '#00b4ff';
   EL.intervaloTxt.textContent = INTERVALO_MS + 'ms';
-  log('MediaPipe Holistic iniciado', 'info');
+  log('Pose + FaceMesh alternados', 'info');
   log('Backend: ' + BACKEND, 'info');
 }
