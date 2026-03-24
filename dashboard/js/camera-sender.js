@@ -13,13 +13,17 @@ function log(msg, tipo = '') {
   if (EL.log.children.length > 25) EL.log.removeChild(EL.log.lastChild);
 }
 
-async function enviarFrame(landmarks) {
+async function enviarFrame(landmarks, emocao = 'neutro', subEstado = 'nenhum') {
   if (enviando) return;
   enviando = true;
   try {
     const res = await fetch(`${BACKEND}/sensor/frame`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(extrairBody(landmarks)),
+      body: JSON.stringify({
+        ...extrairBody(landmarks),
+        emocao:     emocao,
+        sub_estado: subEstado,
+      }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
