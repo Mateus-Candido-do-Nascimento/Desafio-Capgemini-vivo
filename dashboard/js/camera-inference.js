@@ -62,12 +62,24 @@ function atualizarDebug(m) {
   EL.b_att.style.width  = (m.attention  * 100) + '%';
   EL.b_hes.style.width  = (m.hesitation * 100) + '%';
 }
+
+function atualizarDebugFace(fm, emocao, subEstado) {
+  const elEmocao    = document.getElementById('v_emocao');
+  const elSubEstado = document.getElementById('v_sub_estado');
+  if (elEmocao)    elEmocao.textContent    = emocao.toUpperCase();
+  if (elSubEstado) elSubEstado.textContent = subEstado.toUpperCase();
+
+  if (!fm) return;
+  const elEye  = document.getElementById('v_eye');
+  const elFurr = document.getElementById('v_furrow');
+  const elCurv = document.getElementById('v_curve');
+  if (elEye)  elEye.textContent  = fm.eye_openness.toFixed(3);
+  if (elFurr) elFurr.textContent = fm.brow_furrow.toFixed(3);
+  if (elCurv) elCurv.textContent = fm.mouth_curve.toFixed(3);
+}
+
 // ═══════════════════════════════════════════════════════════
 // FACE — métricas faciais usando landmarks do FaceMesh (468 pts)
-// 4=ponta do nariz  159=olho esq centro  386=olho dir centro
-// 61=boca esq  291=boca dir  13=lábio sup  14=lábio inf
-// 234=têmpora esq  454=têmpora dir
-// 105=sobrancelha esq  334=sobrancelha dir
 // ═══════════════════════════════════════════════════════════
 
 function dist(a, b) {
@@ -79,70 +91,52 @@ function dist(a, b) {
 function inferirFace(lm) {
   if (!lm || lm.length < 468) return null;
 
-  const nariz    = lm[4];    // ponta do nariz
-  const olhoEsq  = lm[159];  // centro aprox olho esquerdo
-  const olhoDir  = lm[386];  // centro aprox olho direito
-  const bocaEsq  = lm[61];   // canto esquerdo da boca
-  const bocaDir  = lm[291];  // canto direito da boca
-  const labioSup = lm[13];   // lábio superior
-  const labioInf = lm[14];   // lábio inferior
-  const tempEsq  = lm[234];  // têmpora/bochecha esquerda
-  const tempDir  = lm[454];  // têmpora/bochecha direita
-  const sobrEsq  = lm[105];  // sobrancelha esquerda centro
-  const sobrDir  = lm[334];  // sobrancelha direita centro
+  const nariz    = lm[4];
+  const olhoEsq  = lm[159];
+  const olhoDir  = lm[386];
+  const bocaEsq  = lm[61];
+  const bocaDir  = lm[291];
+  const labioSup = lm[13];
+  const labioInf = lm[14];
+  const tempEsq  = lm[234];
+  const tempDir  = lm[454];
+  const sobrEsq  = lm[105];
+  const sobrDir  = lm[334];
 
-  // Referência: distância entre têmporas (largura do rosto)
   const larguraRosto = dist(tempEsq, tempDir) || 0.001;
 
-  // 1. gaze_x — nariz deslocado em relação ao centro dos olhos
-  //    0 = olhando reto, negativo = esquerda, positivo = direita
   const centroOlhosX = (olhoEsq.x + olhoDir.x) / 2;
   const gaze_x = (nariz.x - centroOlhosX) / larguraRosto;
 
-  // 2. head_tilt — diferença Y entre olhos
-  //    0 = reto, positivo = inclinado pra direita
   const head_tilt = (olhoDir.y - olhoEsq.y) / larguraRosto;
 
-  // 3. face_frontal — simetria têmpora-nariz
-  //    1.0 = perfeitamente de frente, 0 = totalmente de lado
-  const distTempEsq = dist(tempEsq, nariz);
-  const distTempDir = dist(tempDir, nariz);
-  const maiorDist = Math.max(distTempEsq, distTempDir) || 0.001;
-  const menorDist = Math.min(distTempEsq, distTempDir);
+  const distTempEsq  = dist(tempEsq, nariz);
+  const distTempDir  = dist(tempDir, nariz);
+  const maiorDist    = Math.max(distTempEsq, distTempDir) || 0.001;
+  const menorDist    = Math.min(distTempEsq, distTempDir);
   const face_frontal = menorDist / maiorDist;
 
-  // 4. mouth_open — abertura real da boca (lábio sup vs inf)
   const mouth_open = dist(labioSup, labioInf) / larguraRosto;
+  const smile      = dist(bocaEsq, bocaDir)   / larguraRosto;
 
-  // 5. smile — largura da boca vs largura do rosto
-  //    Valor alto = sorriso largo
-  const smile = dist(bocaEsq, bocaDir) / larguraRosto;
-
-  // 6. brow_raise — sobrancelha vs olho no eixo Y
-  //    Valor alto = sobrancelha levantada
-  const centroSobrY = (sobrEsq.y + sobrDir.y) / 2;
+  const centroSobrY  = (sobrEsq.y + sobrDir.y) / 2;
   const centroOlhosY = (olhoEsq.y + olhoDir.y) / 2;
-  const brow_raise = (centroOlhosY - centroSobrY) / larguraRosto;
+  const brow_raise   = (centroOlhosY - centroSobrY) / larguraRosto;
 
-    // 7. eye_openness — abertura dos olhos (largo = curioso, estreito = bravo)
-  //    Pálpebra superior vs inferior de cada olho
-  const olhoEsqSup = lm[159];  // já temos
-  const olhoEsqInf = lm[145];
-  const olhoDirSup = lm[386];
-  const olhoDirInf = lm[374];
+  const olhoEsqSup   = lm[159];
+  const olhoEsqInf   = lm[145];
+  const olhoDirSup   = lm[386];
+  const olhoDirInf   = lm[374];
   const eye_openness = ((dist(olhoEsqSup, olhoEsqInf) + dist(olhoDirSup, olhoDirInf)) / 2) / larguraRosto;
 
-  // 8. brow_furrow — distância entre sobrancelhas internas (baixo = franzido/bravo)
-  const sobrIntEsq = lm[107];  // ponta interna sobrancelha esq
-  const sobrIntDir = lm[336];  // ponta interna sobrancelha dir
+  const sobrIntEsq  = lm[107];
+  const sobrIntDir  = lm[336];
   const brow_furrow = dist(sobrIntEsq, sobrIntDir) / larguraRosto;
 
-  // 9. mouth_curve — cantos da boca vs centro do lábio (positivo = sorriso, negativo = tristeza)
   const centroLabioY = labioSup.y;
   const cantoEsqY    = bocaEsq.y;
   const cantoDirY    = bocaDir.y;
   const mouth_curve  = ((centroLabioY - cantoEsqY) + (centroLabioY - cantoDirY)) / 2 / larguraRosto;
-
 
   return {
     gaze_x:       parseFloat(gaze_x.toFixed(3)),
@@ -151,8 +145,91 @@ function inferirFace(lm) {
     mouth_open:   parseFloat(mouth_open.toFixed(3)),
     smile:        parseFloat(smile.toFixed(3)),
     brow_raise:   parseFloat(brow_raise.toFixed(3)),
-    eye_openness:  parseFloat(eye_openness.toFixed(3)),
-    brow_furrow:   parseFloat(brow_furrow.toFixed(3)),
-    mouth_curve:   parseFloat(mouth_curve.toFixed(3)),
+    eye_openness: parseFloat(eye_openness.toFixed(3)),
+    brow_furrow:  parseFloat(brow_furrow.toFixed(3)),
+    mouth_curve:  parseFloat(mouth_curve.toFixed(3)),
   };
+}
+
+// ═══════════════════════════════════════════════════════════
+// EMOÇÃO — baseado em Ekman (FACS) via métricas do FaceMesh
+// Referência: "Emotions Revealed" e "Unmasking the Face"
+// ═══════════════════════════════════════════════════════════
+
+function inferirEmocao(fm) {
+  if (!fm) return 'neutro';
+
+  const { eye_openness, brow_furrow, brow_raise, mouth_curve, mouth_open } = fm;
+
+  // Curioso — AU1+AU2+AU5: olhos abertos, sobrancelha levantada, boca neutra/aberta
+  if (eye_openness > 0.06 && brow_raise > 0.06 && mouth_curve > -0.01) {
+    return 'curioso';
+  }
+
+  // Bravo — AU4+AU5+AU23: sobrancelha franzida, olho estreito, boca contraída
+  if (brow_furrow < 0.06 && eye_openness < 0.04 && mouth_curve < -0.01) {
+    return 'bravo';
+  }
+
+  // Triste — AU1+AU15: canto da boca caído, sobrancelha interna levantada
+  if (mouth_curve < -0.015 && brow_furrow < 0.08 && eye_openness >= 0.04) {
+    return 'triste';
+  }
+
+  // Desanimado — olho meio fechado, boca neutra/para baixo, sobrancelha baixa
+  if (eye_openness < 0.035 && mouth_curve <= 0.0 && brow_raise < 0.04) {
+    return 'desanimado';
+  }
+
+  return 'neutro';
+}
+
+// ═══════════════════════════════════════════════════════════
+// SUB-ESTADO — gestos corporais baseados em Navarro + Pease
+// Referência: "What Every Body Is Saying" / "Body Language"
+// ═══════════════════════════════════════════════════════════
+
+function inferirSubEstado(l) {
+  if (!l || l.length < 25) return 'nenhum';
+
+  const noseX     = l[0]?.x  ?? 0.5;
+  const noseY     = l[0]?.y  ?? 0.5;
+  const shoulderY = ((l[11]?.y ?? 0.4) + (l[12]?.y ?? 0.4)) / 2;
+  const midX      = ((l[11]?.x ?? 0.4) + (l[12]?.x ?? 0.6)) / 2;
+
+  const lWristX   = l[15]?.x ?? 0.3;
+  const lWristY   = l[15]?.y ?? 0.6;
+  const rWristX   = l[16]?.x ?? 0.7;
+  const rWristY   = l[16]?.y ?? 0.6;
+
+  // Pulso mais próximo do nariz em X (gesto de face)
+  const lDistX  = Math.abs(lWristX - noseX);
+  const rDistX  = Math.abs(rWristX - noseX);
+  const wristX  = lDistX < rDistX ? lWristX : rWristX;
+  const wristY  = lDistX < rDistX ? lWristY : rWristY;
+
+  const faceProxX = Math.abs(wristX - noseX) < 0.12;
+
+  // avaliando — mão no queixo (Navarro: gesto de avaliação deliberada)
+  if (faceProxX && wristY > shoulderY && wristY < noseY) {
+    return 'avaliando';
+  }
+
+  // em_duvida — coçando a cabeça (Navarro: incerteza, conflito interno)
+  if (faceProxX && wristY < noseY - 0.02) {
+    return 'em_duvida';
+  }
+
+  // estressado — mão no pescoço (Navarro: gesto pacificador mais confiável)
+  const neckY = shoulderY - 0.06;
+  if (faceProxX && wristY > noseY && wristY < neckY + 0.08) {
+    return 'estressado';
+  }
+
+  // resistencia — braços cruzados (Pease: postura fechada, bloqueio)
+  if (lWristX > midX + 0.04 && rWristX < midX - 0.04) {
+    return 'resistencia';
+  }
+
+  return 'nenhum';
 }

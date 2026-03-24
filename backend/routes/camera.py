@@ -27,6 +27,9 @@ class FrameMediaPipe(BaseModel):
     right_wrist_x:    float = Field(default=0.7, ge=0.0, le=1.0)
     right_wrist_y:    float = Field(default=0.6, ge=0.0, le=1.0)
     visibility:       float = Field(default=1.0, ge=0.0, le=1.0)
+    # Campos adicionais para inferência de estado operacional:
+    emocao:     str = Field(default='neutro')
+    sub_estado: str = Field(default='nenhum')
     timestamp:        Optional[str] = None
 
 
@@ -108,8 +111,9 @@ def _traduzir_frame(frame: FrameMediaPipe) -> EventoSensor:
         tempo_parado     = 0,
         attention_score  = round(attention, 2),
         hesitation_score = round(hesitation, 2),
+        emocao           = frame.emocao,      # novo
+        sub_estado       = frame.sub_estado,  # novo
     )
-
 
 def _inferir_estado(
     attention:   float,

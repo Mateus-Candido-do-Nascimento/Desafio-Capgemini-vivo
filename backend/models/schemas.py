@@ -16,6 +16,9 @@ class EventoSensor(BaseModel):
     estado_estimado: str = Field(default="aguardando")
     attention_score: float = Field(default=0.0, ge=0.0, le=1.0)
     hesitation_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    # Landmarks brutos do MediaPipe (normalizados entre 0 e 1)
+    emocao:     Optional[str] = 'neutro'
+    sub_estado: Optional[str] = 'nenhum'
     timestamp: datetime = Field(default_factory=datetime.now)
 
 

@@ -9,7 +9,7 @@ let poseModelo   = null;
 let faceModelo   = null;
 let ultimoFace   = null;
 let frameIdx     = 0;
-const FACE_CADA  = 2;    // a cada 5 frames, 1 vai pro FaceMesh
+const FACE_CADA  = 4;    // a cada 2 frames, 1 vai pro FaceMesh
 
 // ── Pose callback ────────────────────────────────────────
 function onPoseResults(results) {
@@ -33,17 +33,18 @@ function onPoseResults(results) {
 
   atualizarDebug(inferirLocal(lm));
 
-  // Métricas faciais do último FaceMesh
   const faceMetrics = inferirFace(ultimoFace);
-  if (faceMetrics) {
-    console.log('FACE:', faceMetrics);
-  }
+  const emocao      = inferirEmocao(faceMetrics);
+  const subEstado   = inferirSubEstado(lm);
+
+  // Debug no painel de calibração
+  atualizarDebugFace(faceMetrics, emocao, subEstado);
 
   const agora = Date.now();
   if (agora - ultimoEnvio < INTERVALO_MS) return;
   ultimoEnvio = agora;
-  enviarFrame(lm);
-}
+  enviarFrame(lm, emocao, subEstado);
+}  // ← fecha onPoseResults
 
 // ── FaceMesh callback ────────────────────────────────────
 function onFaceResults(results) {
@@ -64,7 +65,7 @@ async function loop() {
       // Frame do FaceMesh (1 a cada FACE_CADA)
       await faceModelo.send({ image: EL.video });
     } else if (poseModelo) {
-      // Frame do Pose (os outros 9)
+      // Frame do Pose (os outros)
       await poseModelo.send({ image: EL.video });
     }
   } catch (_) {}
