@@ -8,17 +8,33 @@ from models.schemas import EventoSensor, DecisaoIA
 
 load_dotenv()
 
-# Prompt enxuto — contexto estático mínimo, sem repetir definições a cada chamada
 SYSTEM_PROMPT = """Você é OlhoVivo AI — classificador de comportamento de varejo físico.
-Analise sinais corporais anônimos e retorne SOMENTE JSON válido, sem markdown.
+Analise sinais corporais e faciais anônimos e retorne SOMENTE JSON válido, sem markdown.
 
 Estados possíveis: idle, engajado, indeciso, decisao, saindo
 Urgência possível: BAIXA, MEDIA, ALTA, CRITICA
 
+Emoções possíveis (contexto adicional — não substituem o estado):
+- curioso: processando ativamente, alta probabilidade de conversão
+- bravo: frustração com preço/produto/atendimento — risco de abandono
+- desanimado: perdeu interesse, janela curta antes de sair
+- triste: quer mas sente que não pode — argumento de valor pode ajudar
+- neutro: sem sinal emocional claro
+
+Sub-estados possíveis (gesto corporal observado):
+- avaliando: mão no queixo — deliberando, não interrompa
+- em_duvida: coçando a cabeça — incerteza, abordagem informativa ajuda
+- estressado: mão no pescoço — sinal de desconforto, abordagem suave
+- resistencia: braços cruzados — postura fechada, não force a venda
+- nenhum: sem gesto identificado
+
+Use emoção e sub-estado para calibrar o tom e urgência da ação recomendada.
+Exemplo: engajado + bravo + resistencia → urgência ALTA, ação de de-escalada.
+Exemplo: indeciso + curioso + avaliando → urgência MEDIA, ofereça informação técnica.
+
 Formato obrigatório:
 {"estado":"engajado","confianca":0.82,"raciocinio":"1 frase curta.","acao_vendedor":"Instrução objetiva (max 12 palavras).","urgencia":"MEDIA"}"""
 
-# Mapeamento de fallback: se a IA retornar perfil antigo, converte para estado novo
 _ALIAS = {
     "INDECISO":        "indeciso",
     "QUASE_COMPRANDO": "decisao",
@@ -27,9 +43,8 @@ _ALIAS = {
     "MEDO_DE_ERRAR":   "indeciso",
 }
 
-# Cooldown em segundos por estado — estados urgentes chamam mais vezes
 _COOLDOWN = {
-    "idle":     999,   # nunca chama Groq pra idle
+    "idle":     999,
     "engajado":  15,
     "indeciso":  10,
     "decisao":    3,
@@ -42,49 +57,59 @@ class GroqProvider(IAProvider):
     Otimizações:
       - Não chama a API para estado idle
       - Cooldown por estado (estados urgentes chamam com mais frequência)
-      - Prompt e input mínimos (~80 tokens input, max_tokens=80 output)
+      - Prompt e input mínimos (~100 tokens input, max_tokens=80 output)
+      - Emoção e sub-estado incluídos apenas quando não são neutro/nenhum
       - Fallback com alias para compatibilidade com perfis legados
     """
 
     def __init__(self):
-        self._client    = Groq(api_key=os.getenv("GROQ_API_KEY"))
-        self._ultimo_estado: str   = "idle"
-        self._ultimo_ts:    float  = 0.0
+        self._client         = Groq(api_key=os.getenv("GROQ_API_KEY"))
+        self._ultimo_estado: str  = "idle"
+        self._ultimo_ts:    float = 0.0
 
     def analisar(self, evento: EventoSensor) -> DecisaoIA:
         estado_atual = evento.estado_estimado
 
-        # Nunca chama Groq para idle — retorna decisão padrão diretamente
         if estado_atual == "idle":
             return self._decisao_idle()
 
-        # Cooldown: só chama se passou tempo suficiente desde a última chamada
-        agora    = time.time()
-        cooldown = _COOLDOWN.get(estado_atual, 10)
+        agora        = time.time()
+        cooldown     = _COOLDOWN.get(estado_atual, 10)
         mesmo_estado = (estado_atual == self._ultimo_estado)
 
-        if mesmo_estado and (agora - self._ultimo_ts) < cooldown:
-            return self._decisao_idle()  # silencia — sem mudança relevante
+        # Força nova chamada se emoção ou sub-estado mudou — mesmo no cooldown
+        emocao_relevante    = getattr(evento, 'emocao', 'neutro') not in ('neutro', None)
+        substado_relevante  = getattr(evento, 'sub_estado', 'nenhum') not in ('nenhum', None)
+        contexto_novo       = emocao_relevante or substado_relevante
 
-        # Atualiza controle
+        if mesmo_estado and not contexto_novo and (agora - self._ultimo_ts) < cooldown:
+            return self._decisao_idle()
+
         self._ultimo_estado = estado_atual
         self._ultimo_ts     = agora
 
         return self._chamar_groq(evento, estado_atual)
 
-    # ------------------------------------------------------------------
-    # Chamada real à API
-    # ------------------------------------------------------------------
     def _chamar_groq(self, evento: EventoSensor, estado_atual: str) -> DecisaoIA:
         inicio = time.time()
 
-        # Input mínimo — só as métricas que a IA realmente precisa
+        emocao     = getattr(evento, 'emocao',     'neutro')
+        sub_estado = getattr(evento, 'sub_estado', 'nenhum')
+
+        # Monta contexto emocional só quando há sinal — economiza tokens
+        contexto_emocional = ""
+        if emocao and emocao != 'neutro':
+            contexto_emocional += f" emocao={emocao}"
+        if sub_estado and sub_estado != 'nenhum':
+            contexto_emocional += f" sub_estado={sub_estado}"
+
         user_msg = (
             f"estado={estado_atual} "
             f"attention={evento.attention_score} "
             f"hesitation={evento.hesitation_score} "
             f"postura={evento.postura} "
             f"movimento={evento.movimento}"
+            f"{contexto_emocional}"
         )
 
         for tentativa in range(3):
@@ -96,21 +121,19 @@ class GroqProvider(IAProvider):
                         {"role": "user",   "content": user_msg},
                     ],
                     temperature=0.2,
-                    max_tokens=80,   # resposta JSON pequena — 80 é mais que suficiente
+                    max_tokens=80,
                 )
                 raw  = response.choices[0].message.content.strip()
                 data = json.loads(raw)
 
-                # Normaliza estado caso a IA retorne perfil legado
                 estado_retornado = data.get("estado", estado_atual)
                 data["estado"] = _ALIAS.get(estado_retornado.upper(), estado_retornado.lower())
 
-                # Mapeia para campos do schema DecisaoIA
                 return DecisaoIA(
                     perfil        = data["estado"],
                     confianca     = float(data.get("confianca", 0.7)),
                     raciocinio    = data.get("raciocinio", ""),
-                    acao_display  = data.get("acao_vendedor", ""),  # reutiliza no display
+                    acao_display  = data.get("acao_vendedor", ""),
                     acao_vendedor = data.get("acao_vendedor", ""),
                     urgencia      = data.get("urgencia", "MEDIA"),
                     latencia_ms   = int((time.time() - inicio) * 1000),
@@ -121,7 +144,6 @@ class GroqProvider(IAProvider):
                 if "rate_limit" in str(e).lower() and tentativa < 2:
                     time.sleep(2)
                     continue
-                # Fallback sem broadcast de erro — retorna estado inferido localmente
                 return DecisaoIA(
                     perfil        = estado_atual,
                     confianca     = 0.5,
@@ -133,9 +155,6 @@ class GroqProvider(IAProvider):
                     erro          = True,
                 )
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
     def _decisao_idle(self) -> DecisaoIA:
         return DecisaoIA(
             perfil        = "idle",

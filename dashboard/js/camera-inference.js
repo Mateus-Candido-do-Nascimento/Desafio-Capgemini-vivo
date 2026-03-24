@@ -167,7 +167,7 @@ function inferirEmocao(fm) {
   }
 
   // Bravo — AU4+AU5+AU23: sobrancelha franzida, olho estreito, boca contraída
-  if (brow_furrow < 0.06 && eye_openness < 0.04 && mouth_curve < -0.01) {
+  if (brow_furrow < 0.24 && eye_openness < 0.04 && mouth_curve < 0.02) {
     return 'bravo';
   }
 
