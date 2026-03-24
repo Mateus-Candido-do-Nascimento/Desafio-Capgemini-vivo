@@ -1,0 +1,76 @@
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:    #07090f; --panel: #0d1117;
+      --border:rgba(0,180,255,0.15);
+      --cyan:  #00b4ff; --green: #00e5a0;
+      --yellow:#ffd060; --red:   #ff3d5a; --dim: #4a5a70;
+    }
+    body { background:var(--bg); color:#c8d6e5; font-family:'Share Tech Mono',monospace;
+           min-height:100vh; display:flex; flex-direction:column;
+           align-items:center; padding:12px; gap:10px; }
+    h1 { font-size:12px; color:var(--cyan); letter-spacing:.12em; text-align:center; }
+
+    /* ── videoWrap: container relativo para empilhar video + canvas ── */
+    #videoWrap {
+      position: relative;
+      width: 100%;
+      max-width: 380px;
+      aspect-ratio: 4/3;          /* reserva espaço antes do stream carregar */
+      background: #07090f;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+    /* video escondido — só fornece frames pro MediaPipe */
+    #video {
+      position: absolute;
+      width: 1px; height: 1px;
+      opacity: 0; pointer-events: none;
+    }
+    /* canvas ocupa todo o wrap — skeleton visível, fundo preto */
+    #poseCanvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      display: block;
+    }
+
+    #estadoBox { width:100%; max-width:380px; background:var(--panel);
+                 border:1px solid var(--border); border-radius:8px;
+                 padding:10px 14px; display:flex; align-items:center; justify-content:space-between; }
+    #estadoAtual { font-size:22px; font-weight:bold; letter-spacing:.1em; color:var(--cyan); transition:color .3s; }
+    #confiancaBadge { font-size:11px; color:var(--dim); text-align:right; }
+
+    #debugPanel { width:100%; max-width:380px; background:var(--panel);
+                  border:1px solid var(--border); border-radius:8px; padding:10px 14px; }
+    .debug-title { font-size:9px; color:var(--dim); letter-spacing:.1em;
+                   margin-bottom:8px; border-bottom:1px solid var(--border); padding-bottom:4px; }
+    .debug-row   { display:flex; justify-content:space-between; align-items:center;
+                   padding:3px 0; font-size:11px; border-bottom:1px solid rgba(0,180,255,.05); }
+    .debug-label { color:var(--dim); }
+    .debug-val   { color:var(--cyan); font-weight:bold; }
+    .debug-val.good   { color:var(--green); }
+    .debug-val.warn   { color:var(--yellow); }
+    .debug-val.danger { color:var(--red); }
+    .bar-wrap { display:flex; align-items:center; gap:6px; }
+    .bar-mini  { width:70px; height:5px; background:rgba(255,255,255,.05); border-radius:3px; overflow:hidden; }
+    .bar-mini-fill { height:100%; border-radius:3px; transition:width .3s; }
+
+    #statusRow { width:100%; max-width:380px; display:flex; justify-content:space-between; font-size:10px; color:var(--dim); }
+    #statusRow span { color:var(--cyan); }
+
+    #backendConfig { width:100%; max-width:380px; display:flex; gap:8px; align-items:center; }
+    #backendInput  { flex:1; background:var(--panel); border:1px solid var(--border);
+                     border-radius:6px; color:#c8d6e5; font-family:monospace;
+                     font-size:10px; padding:8px 10px; outline:none; }
+    #backendInput:focus { border-color:var(--cyan); }
+    #btnSave { padding:8px 12px; background:rgba(0,180,255,.1); border:1px solid var(--border);
+               border-radius:6px; color:var(--cyan); font-family:monospace;
+               font-size:10px; cursor:pointer; white-space:nowrap; }
+
+    #log { width:100%; max-width:380px; font-size:10px; color:var(--dim);
+           max-height:100px; overflow-y:auto; line-height:1.7; }
+    .log-ok   { color:var(--green); }
+    .log-err  { color:var(--red); }
+    .log-info { color:var(--cyan); }
