@@ -124,6 +124,26 @@ function inferirFace(lm) {
   const centroOlhosY = (olhoEsq.y + olhoDir.y) / 2;
   const brow_raise = (centroOlhosY - centroSobrY) / larguraRosto;
 
+    // 7. eye_openness — abertura dos olhos (largo = curioso, estreito = bravo)
+  //    Pálpebra superior vs inferior de cada olho
+  const olhoEsqSup = lm[159];  // já temos
+  const olhoEsqInf = lm[145];
+  const olhoDirSup = lm[386];
+  const olhoDirInf = lm[374];
+  const eye_openness = ((dist(olhoEsqSup, olhoEsqInf) + dist(olhoDirSup, olhoDirInf)) / 2) / larguraRosto;
+
+  // 8. brow_furrow — distância entre sobrancelhas internas (baixo = franzido/bravo)
+  const sobrIntEsq = lm[107];  // ponta interna sobrancelha esq
+  const sobrIntDir = lm[336];  // ponta interna sobrancelha dir
+  const brow_furrow = dist(sobrIntEsq, sobrIntDir) / larguraRosto;
+
+  // 9. mouth_curve — cantos da boca vs centro do lábio (positivo = sorriso, negativo = tristeza)
+  const centroLabioY = labioSup.y;
+  const cantoEsqY    = bocaEsq.y;
+  const cantoDirY    = bocaDir.y;
+  const mouth_curve  = ((centroLabioY - cantoEsqY) + (centroLabioY - cantoDirY)) / 2 / larguraRosto;
+
+
   return {
     gaze_x:       parseFloat(gaze_x.toFixed(3)),
     head_tilt:    parseFloat(head_tilt.toFixed(3)),
@@ -131,5 +151,8 @@ function inferirFace(lm) {
     mouth_open:   parseFloat(mouth_open.toFixed(3)),
     smile:        parseFloat(smile.toFixed(3)),
     brow_raise:   parseFloat(brow_raise.toFixed(3)),
+    eye_openness:  parseFloat(eye_openness.toFixed(3)),
+    brow_furrow:   parseFloat(brow_furrow.toFixed(3)),
+    mouth_curve:   parseFloat(mouth_curve.toFixed(3)),
   };
 }

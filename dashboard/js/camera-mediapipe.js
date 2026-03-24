@@ -9,7 +9,7 @@ let poseModelo   = null;
 let faceModelo   = null;
 let ultimoFace   = null;
 let frameIdx     = 0;
-const FACE_CADA  = 5;    // a cada 5 frames, 1 vai pro FaceMesh
+const FACE_CADA  = 2;    // a cada 5 frames, 1 vai pro FaceMesh
 
 // ── Pose callback ────────────────────────────────────────
 function onPoseResults(results) {
