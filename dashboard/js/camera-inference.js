@@ -150,86 +150,80 @@ function inferirFace(lm) {
     mouth_curve:  parseFloat(mouth_curve.toFixed(3)),
   };
 }
-
 // ═══════════════════════════════════════════════════════════
-// EMOÇÃO — baseado em Ekman (FACS) via métricas do FaceMesh
-// Referência: "Emotions Revealed" e "Unmasking the Face"
+// EMOÇÃO — classifica emoção a partir das métricas faciais
+// Baseado em FACS (Ekman) — Action Units aproximadas
 // ═══════════════════════════════════════════════════════════
+function inferirEmocao(face) {
+  if (!face) return 'neutro';
 
-function inferirEmocao(fm) {
-  if (!fm) return 'neutro';
+  const { eye_openness, brow_raise, brow_furrow, mouth_curve } = face;
 
-  const { eye_openness, brow_furrow, brow_raise, mouth_curve, mouth_open } = fm;
-
-  // Curioso — AU1+AU2+AU5: olhos abertos, sobrancelha levantada, boca neutra/aberta
-  if (eye_openness > 0.06 && brow_raise > 0.06 && mouth_curve > -0.01) {
-    return 'curioso';
-  }
-
-  // Bravo — AU4+AU5+AU23: sobrancelha franzida, olho estreito, boca contraída
-  if (brow_furrow < 0.24 && eye_openness < 0.04 && mouth_curve < 0.02) {
+  // Bravo: sobrancelhas juntas + olhos estreitos + boca tensa
+  if (brow_furrow < 0.18 && eye_openness < 0.25 && mouth_curve < 0.0)
     return 'bravo';
-  }
 
-  // Triste — AU1+AU15: canto da boca caído, sobrancelha interna levantada
-  if (mouth_curve < -0.015 && brow_furrow < 0.08 && eye_openness >= 0.04) {
+  // Triste: boca caída + sobrancelhas juntas + olhos semi-fechados
+  if (mouth_curve < -0.01 && brow_furrow < 0.22 && eye_openness < 0.30)
     return 'triste';
-  }
 
-  // Desanimado — olho meio fechado, boca neutra/para baixo, sobrancelha baixa
-  if (eye_openness < 0.035 && mouth_curve <= 0.0 && brow_raise < 0.04) {
+  // Desanimado: olhos muito fechados + sobrancelha baixa + boca neutra
+  if (eye_openness < 0.18 && brow_raise < 0.20)
     return 'desanimado';
-  }
+
+  // Curioso: olhos abertos + sobrancelha levantada
+  if (eye_openness > 0.30 && brow_raise > 0.28)
+    return 'curioso';
 
   return 'neutro';
 }
 
 // ═══════════════════════════════════════════════════════════
-// SUB-ESTADO — gestos corporais baseados em Navarro + Pease
-// Referência: "What Every Body Is Saying" / "Body Language"
+// SUB-ESTADO — detecta gesto corporal a partir do Pose
+// Baseado em Navarro (2008) e Pease (2004)
 // ═══════════════════════════════════════════════════════════
+function inferirSubEstado(lm) {
+  if (!lm || lm.length < 17) return 'nenhum';
 
-function inferirSubEstado(l) {
-  if (!l || l.length < 25) return 'nenhum';
+  const nose      = lm[0];
+  const shoulderL = lm[11];
+  const shoulderR = lm[12];
+  const wristL    = lm[15];
+  const wristR    = lm[16];
 
-  const noseX     = l[0]?.x  ?? 0.5;
-  const noseY     = l[0]?.y  ?? 0.5;
-  const shoulderY = ((l[11]?.y ?? 0.4) + (l[12]?.y ?? 0.4)) / 2;
-  const midX      = ((l[11]?.x ?? 0.4) + (l[12]?.x ?? 0.6)) / 2;
+  const shoulder_y = (shoulderL.y + shoulderR.y) / 2;
+  const mid_x      = (shoulderL.x + shoulderR.x) / 2;
 
-  const lWristX   = l[15]?.x ?? 0.3;
-  const lWristY   = l[15]?.y ?? 0.6;
-  const rWristX   = l[16]?.x ?? 0.7;
-  const rWristY   = l[16]?.y ?? 0.6;
+  // Braços cruzados — pulsos cruzando a linha central do corpo
+  const bracosCruzados =
+    wristL.x > mid_x + 0.05 && wristR.x < mid_x - 0.05;
+  if (bracosCruzados) return 'resistencia';
 
-  // Pulso mais próximo do nariz em X (gesto de face)
-  const lDistX  = Math.abs(lWristX - noseX);
-  const rDistX  = Math.abs(rWristX - noseX);
-  const wristX  = lDistX < rDistX ? lWristX : rWristX;
-  const wristY  = lDistX < rDistX ? lWristY : rWristY;
+  // Mão no queixo — pulso entre ombro e nariz, próximo ao centro
+  const pulsoNaAlturaDaFace = (w) =>
+    w.y < nose.y + 0.05 &&
+    w.y > shoulder_y - 0.05 &&
+    Math.abs(w.x - mid_x) < 0.15;
 
-  const faceProxX = Math.abs(wristX - noseX) < 0.12;
-
-  // avaliando — mão no queixo (Navarro: gesto de avaliação deliberada)
-  if (faceProxX && wristY > shoulderY && wristY < noseY) {
+  if (pulsoNaAlturaDaFace(wristL) || pulsoNaAlturaDaFace(wristR))
     return 'avaliando';
-  }
 
-  // em_duvida — coçando a cabeça (Navarro: incerteza, conflito interno)
-  if (faceProxX && wristY < noseY - 0.02) {
+  // Mão na cabeça — pulso acima do nariz, próximo ao centro
+  const pulsoNaCabeca = (w) =>
+    w.y < nose.y - 0.05 &&
+    Math.abs(w.x - mid_x) < 0.20;
+
+  if (pulsoNaCabeca(wristL) || pulsoNaCabeca(wristR))
     return 'em_duvida';
-  }
 
-  // estressado — mão no pescoço (Navarro: gesto pacificador mais confiável)
-  const neckY = shoulderY - 0.06;
-  if (faceProxX && wristY > noseY && wristY < neckY + 0.08) {
+  // Mão no pescoço — pulso centralizado na altura do pescoço
+  const pescocoY = shoulder_y - 0.08;
+  const pulsoNoPescoco = (w) =>
+    Math.abs(w.y - pescocoY) < 0.06 &&
+    Math.abs(w.x - mid_x) < 0.12;
+
+  if (pulsoNoPescoco(wristL) || pulsoNoPescoco(wristR))
     return 'estressado';
-  }
-
-  // resistencia — braços cruzados (Pease: postura fechada, bloqueio)
-  if (lWristX > midX + 0.04 && rWristX < midX - 0.04) {
-    return 'resistencia';
-  }
 
   return 'nenhum';
 }

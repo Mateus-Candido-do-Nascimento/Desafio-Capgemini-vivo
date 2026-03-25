@@ -36,6 +36,12 @@ const EL = {
   b_sdx:  document.getElementById('b_sdx'),
   b_att:  document.getElementById('b_att'),
   b_hes:  document.getElementById('b_hes'),
+  v_sub_estado: document.getElementById('v_sub_estado'),
+  v_eye:        document.getElementById('v_eye'),
+  v_furrow:     document.getElementById('v_furrow'),
+  v_curve:      document.getElementById('v_curve'),
+  v_emocao:     document.getElementById('v_emocao'),
+
 };
 
 const poseCtx = EL.poseCanvas.getContext('2d');

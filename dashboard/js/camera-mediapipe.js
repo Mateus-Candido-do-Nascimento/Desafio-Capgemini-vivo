@@ -32,13 +32,28 @@ function onPoseResults(results) {
   }
 
   atualizarDebug(inferirLocal(lm));
-
   const faceMetrics = inferirFace(ultimoFace);
   const emocao      = inferirEmocao(faceMetrics);
   const subEstado   = inferirSubEstado(lm);
 
-  // Debug no painel de calibração
-  atualizarDebugFace(faceMetrics, emocao, subEstado);
+  // Sub-estado — vem do Pose, independente do FaceMesh
+  if (EL.v_sub_estado) {
+    EL.v_sub_estado.textContent = subEstado !== 'nenhum' ? subEstado.toUpperCase() : 'NENHUM';
+    EL.v_sub_estado.style.color = subEstado !== 'nenhum' ? 'var(--yellow)' : 'var(--dim)';
+  }
+  
+  // Atualiza debug facial
+  if (faceMetrics && EL.v_eye) {
+    EL.v_eye.textContent    = faceMetrics.eye_openness.toFixed(3);
+    EL.v_furrow.textContent = faceMetrics.brow_furrow.toFixed(3);
+    EL.v_curve.textContent  = faceMetrics.mouth_curve.toFixed(3);
+    EL.v_emocao.textContent = emocao.toUpperCase();
+    EL.v_emocao.style.color = emocao !== 'neutro' ? 'var(--yellow)' : 'var(--dim)';
+    
+
+  }
+
+
 
   const agora = Date.now();
   if (agora - ultimoEnvio < INTERVALO_MS) return;
@@ -50,8 +65,12 @@ function onPoseResults(results) {
 function onFaceResults(results) {
   if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
     ultimoFace = results.multiFaceLandmarks[0];
+    log('Face pts: ' + ultimoFace.length + ' pts', 'ok');
+  } else {
+    log('FaceMesh: sem rosto', 'err');
   }
 }
+
 
 // ── Loop único alternado ─────────────────────────────────
 async function loop() {
