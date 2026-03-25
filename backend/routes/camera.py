@@ -33,6 +33,10 @@ class FrameMediaPipe(BaseModel):
     timestamp:        Optional[str] = None
 
 
+# Calibração adaptativa de hesitação — se ajusta à distância da câmera
+_shoulder_dx_max: float = 0.25
+
+
 def criar_router(agente: AgenteService) -> APIRouter:
 
     @router.post("/frame")
@@ -76,9 +80,12 @@ def _traduzir_frame(frame: FrameMediaPipe) -> EventoSensor:
         0.3 + shoulder_dx * 1.2 + (0.25 if arm_raised else 0) + (0.1 if head_down else 0)
     ))
 
-    # hesitation_score — simetria dos ombros (pessoa parada, centralizada)
+    # hesitation_score — adaptativo ao máximo observado na sessão
+    # Funciona para qualquer distância de câmera (loja fixa ou celular)
+    global _shoulder_dx_max
+    _shoulder_dx_max = max(_shoulder_dx_max, shoulder_dx * 0.98)
     hesitation = min(1.0, max(0.0,
-        0.8 - shoulder_dx * 2.0
+        1.2 - (shoulder_dx / _shoulder_dx_max) * 1.2
     ))
 
     # Inferência do estado operacional
