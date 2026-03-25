@@ -4,35 +4,53 @@ import time
 import asyncio
 from groq import Groq
 from dotenv import load_dotenv
+from typing import Optional
 from providers.ia_provider import IAProvider
-from models.schemas import EventoSensor, DecisaoIA
+from models.schemas import EventoSensor, DecisaoIA, AvaliacaoPsicometrica
 
 
 load_dotenv()
 
-SYSTEM_PROMPT = """Você é OlhoVivo AI — classificador de comportamento de varejo físico.
-Analise sinais corporais e faciais anônimos e retorne SOMENTE JSON válido, sem markdown.
+SYSTEM_PROMPT = """Você é OlhoVivo AI — assistente de inteligência comportamental para varejo físico.
+Analise os dados e oriente o vendedor com base em psicologia de varejo real.
+Retorne SOMENTE JSON válido, sem markdown.
 
-Estados possíveis: idle, engajado, indeciso, decisao, saindo
-Urgência possível: BAIXA, MEDIA, ALTA, CRITICA
+PRINCÍPIOS FUNDAMENTAIS (não viole):
+1. Desconto imediato para cliente saindo = treina comportamento negativo, NUNCA recomende
+2. Abordagem agressiva com cliente resistente = garante abandono
+3. Interromper cliente no momento de decisão = perda de venda
+4. "Observe e aguarde" é estratégia válida — às vezes a melhor ação é nenhuma
+5. confianca < 0.60 → ação conservadora sempre
 
-Emoções possíveis (contexto adicional — não substituem o estado):
-- curioso: processando ativamente, alta probabilidade de conversão
-- bravo: frustração com preço/produto/atendimento — risco de abandono
-- desanimado: perdeu interesse, janela curta antes de sair
-- triste: quer mas sente que não pode — argumento de valor pode ajudar
+LEITURA DOS SCORES PSICOMÉTRICOS:
+- intencao > 0.70 → cliente inclinado a comprar, facilite sem pressionar
+- intencao < 0.35 → baixo interesse, não force abordagem
+- estresse > 0.55 → cliente desconfortável, dê espaço imediatamente
+- hesitacao > 0.60 → em dúvida, informação técnica ajuda mais que pressão
+- engajamento > 0.70 → boa janela de abordagem natural
+
+ESTRATÉGIA POR ESTADO:
+- idle: standby, nenhuma ação
+- engajado: observe antes de abordar — interrupção precoce afasta
+- indeciso: abordagem informativa suave, ofereça ajuda sem pressionar
+- decisao: facilite, remova obstáculos, não interrompa o processo
+- saindo + engajamento alto: abordagem discreta e respeitosa é possível
+- saindo + engajamento baixo: deixe ir, era curioso, não comprador
+
+EMOÇÕES (contexto adicional):
+- curioso: alta probabilidade de conversão, aborde naturalmente
+- bravo: frustração ativa, recue e dê espaço
+- desanimado: interesse caindo, janela curta para abordagem informativa
 - neutro: sem sinal emocional claro
 
-Sub-estados possíveis (gesto corporal observado):
-- avaliando: mão no queixo — deliberando, não interrompa
-- em_duvida: coçando a cabeça — incerteza, abordagem informativa ajuda
-- estressado: mão no pescoço — sinal de desconforto, abordagem suave
-- resistencia: braços cruzados — postura fechada, não force a venda
-- nenhum: sem gesto identificado
+SUB-ESTADOS (gestos):
+- avaliando: deliberando, não interrompa
+- em_duvida: incerteza, ofereça informação técnica
+- estressado: desconforto, abordagem muito suave ou recue
+- resistencia: postura fechada, não force a venda
 
-Use emoção e sub-estado para calibrar o tom e urgência da ação recomendada.
-Exemplo: engajado + bravo + resistencia → urgência ALTA, ação de de-escalada.
-Exemplo: indeciso + curioso + avaliando → urgência MEDIA, ofereça informação técnica.
+Estados: idle, engajado, indeciso, decisao, saindo
+Urgência: BAIXA, MEDIA, ALTA, CRITICA
 
 Formato obrigatório:
 {"estado":"engajado","confianca":0.82,"raciocinio":"1 frase curta.","acao_vendedor":"Instrução objetiva (max 12 palavras).","urgencia":"MEDIA"}"""
@@ -47,10 +65,10 @@ _ALIAS = {
 
 _COOLDOWN = {
     "idle":     999,
-    "engajado":  15,
-    "indeciso":  10,
-    "decisao":    3,
-    "saindo":     2,
+    "engajado":  20,
+    "indeciso":  12,
+    "decisao":    5,
+    "saindo":    10,  # era 2 — evita spam de recomendações precipitadas
 }
 
 class GroqProvider(IAProvider):
@@ -69,7 +87,11 @@ class GroqProvider(IAProvider):
         self._ultimo_estado: str  = "idle"
         self._ultimo_ts:    float = 0.0
 
-    async def analisar(self, evento: EventoSensor) -> DecisaoIA:
+    async def analisar(
+        self,
+        evento: EventoSensor,
+        psico: Optional[AvaliacaoPsicometrica] = None,
+    ) -> DecisaoIA:
         estado_atual = evento.estado_estimado
 
         if estado_atual == "idle":
@@ -90,15 +112,31 @@ class GroqProvider(IAProvider):
         self._ultimo_estado = estado_atual
         self._ultimo_ts     = agora
 
-        return await self._chamar_groq(evento, estado_atual)
+        return await self._chamar_groq(evento, estado_atual, psico)
 
-    async def _chamar_groq(self, evento: EventoSensor, estado_atual: str) -> DecisaoIA:
+    async def _chamar_groq(
+        self,
+        evento: EventoSensor,
+        estado_atual: str,
+        psico: Optional[AvaliacaoPsicometrica] = None,
+    ) -> DecisaoIA:
         inicio = time.time()
 
         emocao     = getattr(evento, 'emocao',     'neutro')
         sub_estado = getattr(evento, 'sub_estado', 'nenhum')
 
-        # Monta contexto emocional só quando há sinal — economiza tokens
+        # Scores psicométricos — contexto científico para o Groq decidir melhor
+        contexto_psico = ""
+        if psico:
+            contexto_psico = (
+                f" engajamento={psico.engajamento:.2f}"
+                f" hesitacao={psico.hesitacao:.2f}"
+                f" intencao={psico.intencao_compra:.2f}"
+                f" estresse={psico.estresse:.2f}"
+                f" confianca={psico.confianca:.2f}"
+            )
+
+        # Contexto emocional e gestual só quando há sinal — economiza tokens
         contexto_emocional = ""
         if emocao and emocao != 'neutro':
             contexto_emocional += f" emocao={emocao}"
@@ -106,11 +144,9 @@ class GroqProvider(IAProvider):
             contexto_emocional += f" sub_estado={sub_estado}"
 
         user_msg = (
-            f"estado={estado_atual} "
-            f"attention={evento.attention_score} "
-            f"hesitation={evento.hesitation_score} "
-            f"postura={evento.postura} "
-            f"movimento={evento.movimento}"
+            f"estado={estado_atual}"
+            f" postura={evento.postura}"
+            f"{contexto_psico}"
             f"{contexto_emocional}"
         )
 
@@ -171,9 +207,9 @@ class GroqProvider(IAProvider):
 
     def _acao_fallback(self, estado: str) -> str:
         acoes = {
-            "engajado": "Cliente interessado — observe sem interromper.",
-            "indeciso": "Aproxime-se e ofereça informação técnica.",
-            "decisao":  "Facilite a compra agora.",
-            "saindo":   "Aborde com oferta relâmpago imediatamente.",
+            "engajado": "Observe — aguarde momento natural para abordar.",
+            "indeciso": "Ofereça informação técnica com tom suave.",
+            "decisao":  "Facilite — remova obstáculos sem interromper.",
+            "saindo":   "Observe — se engajou bem, abordagem discreta possível.",
         }
         return acoes.get(estado, "Monitore o cliente.")

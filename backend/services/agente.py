@@ -56,7 +56,8 @@ class AgenteService:
 
 
         # 3. IA generativa interpreta e gera ação pro vendedor
-        decisao = await self._ia.analisar(evento_enriquecido)
+        #    Psicometria é passada para enriquecer o contexto do Groq
+        decisao = await self._ia.analisar(evento_enriquecido, psico=psico)
 
         # 4. Injeta raciocínio psicométrico no raciocínio final
         decisao.raciocinio = f"[Psico] {psico.raciocinio_psico} | {decisao.raciocinio}"

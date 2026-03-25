@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from models.schemas import EventoSensor, DecisaoIA
+from typing import Optional
+from models.schemas import EventoSensor, DecisaoIA, AvaliacaoPsicometrica
 
 
 class IAProvider(ABC):
@@ -9,5 +10,9 @@ class IAProvider(ABC):
     """
 
     @abstractmethod
-    async def analisar(self, evento: EventoSensor) -> DecisaoIA:
+    async def analisar(
+        self,
+        evento: EventoSensor,
+        psico: Optional[AvaliacaoPsicometrica] = None,
+    ) -> DecisaoIA:
         ...
