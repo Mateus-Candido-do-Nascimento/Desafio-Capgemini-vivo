@@ -2,6 +2,36 @@
 // CAMERA-INFERENCE — cálculo de métricas e estado
 // Responsabilidade: lógica de negócio (corpo → estado)
 // ═══════════════════════════════════════════════════════════
+const BASELINE_FRAMES = 30; // ~3 segundos de coleta
+let _baseline = null;
+let _baselineBuffer = [];
+let _shoulderDxMax = 0.25; // calibração adaptativa para hesitação
+
+function atualizarBaseline(face) {
+  if (_baseline) return; // já calibrado
+
+  _baselineBuffer.push({
+    eye_openness: face.eye_openness,
+    brow_raise:   face.brow_raise,
+    brow_furrow:  face.brow_furrow,
+    mouth_curve:  face.mouth_curve,
+  });
+
+  if (_baselineBuffer.length >= BASELINE_FRAMES) {
+    const n = _baselineBuffer.length;
+    _baseline = {
+      eye_openness: _baselineBuffer.reduce((s, f) => s + f.eye_openness, 0) / n,
+      brow_raise:   _baselineBuffer.reduce((s, f) => s + f.brow_raise,   0) / n,
+      brow_furrow:  _baselineBuffer.reduce((s, f) => s + f.brow_furrow,  0) / n,
+      mouth_curve:  _baselineBuffer.reduce((s, f) => s + f.mouth_curve,  0) / n,
+    };
+    log(`Baseline: eye=${_baseline.eye_openness.toFixed(3)} brow=${_baseline.brow_raise.toFixed(3)}`, 'ok');
+  } else if (_baselineBuffer.length % 10 === 0) {
+    log(`Calibrando... ${_baselineBuffer.length}/${BASELINE_FRAMES}`, 'info');
+  }
+
+}
+
 
 function inferirLocal(l) {
   const shoulder_y  = ((l[11]?.y ?? 0.4) + (l[12]?.y ?? 0.4)) / 2;
@@ -16,7 +46,10 @@ function inferirLocal(l) {
   const attention  = Math.min(1, Math.max(0,
     0.3 + shoulder_dx * 1.2 + (arm_raised ? 0.25 : 0) + (head_down ? 0.1 : 0)
   ));
-  const hesitation = Math.min(1, Math.max(0, 0.8 - shoulder_dx * 2.0));
+  // Hesitação adaptativa: relativa ao máximo observado da sessão
+  // Funciona para qualquer distância de câmera (loja fixa ou celular)
+  _shoulderDxMax = Math.max(_shoulderDxMax, shoulder_dx * 0.98);
+  const hesitation = Math.min(1, Math.max(0, 1.2 - (shoulder_dx / _shoulderDxMax) * 1.2));
 
   let estado = 'idle';
   if (visibility < 0.4)                        estado = 'idle';
@@ -157,23 +190,19 @@ function inferirFace(lm) {
 function inferirEmocao(face) {
   if (!face) return 'neutro';
 
-  const { eye_openness, brow_raise, brow_furrow, mouth_curve } = face;
+  atualizarBaseline(face);
+  if (!_baseline) return 'neutro';
 
-  // Bravo: sobrancelhas juntas + olhos estreitos + boca tensa
-  if (brow_furrow < 0.18 && eye_openness < 0.25 && mouth_curve < 0.0)
-    return 'bravo';
+  
 
-  // Triste: boca caída + sobrancelhas juntas + olhos semi-fechados
-  if (mouth_curve < -0.01 && brow_furrow < 0.22 && eye_openness < 0.30)
-    return 'triste';
 
-  // Desanimado: olhos muito fechados + sobrancelha baixa + boca neutra
-  if (eye_openness < 0.18 && brow_raise < 0.20)
-    return 'desanimado';
+  // Sinal primário: sobrancelha (mais confiável que olho no MediaPipe 2D)
+  const relLevant = (face.brow_raise  - _baseline.brow_raise)  / (_baseline.brow_raise  || 0.01);
+  const relSobr   = (face.brow_furrow - _baseline.brow_furrow) / (_baseline.brow_furrow || 0.01);
 
-  // Curioso: olhos abertos + sobrancelha levantada
-  if (eye_openness > 0.30 && brow_raise > 0.28)
-    return 'curioso';
+  if (relLevant > 0.12)                     return 'curioso';    // sobrancelha levantou
+  if (relLevant < -0.12 && relSobr < -0.10) return 'bravo';      // abaixou + franzida
+  if (relLevant < -0.08)                     return 'desanimado'; // levemente caída
 
   return 'neutro';
 }
@@ -194,9 +223,12 @@ function inferirSubEstado(lm) {
   const shoulder_y = (shoulderL.y + shoulderR.y) / 2;
   const mid_x      = (shoulderL.x + shoulderR.x) / 2;
 
-  // Braços cruzados — pulsos cruzando a linha central do corpo
+  // Braços cruzados — margem maior + abaixo dos ombros (evita falso positivo ao segurar celular)
   const bracosCruzados =
-    wristL.x > mid_x + 0.05 && wristR.x < mid_x - 0.05;
+    wristL.x > mid_x + 0.12 &&
+    wristR.x < mid_x - 0.12 &&
+    wristL.y > shoulder_y   &&
+    wristR.y > shoulder_y;
   if (bracosCruzados) return 'resistencia';
 
   // Mão no queixo — pulso entre ombro e nariz, próximo ao centro

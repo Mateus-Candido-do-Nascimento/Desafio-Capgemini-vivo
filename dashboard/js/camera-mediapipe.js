@@ -44,14 +44,29 @@ function onPoseResults(results) {
   
   // Atualiza debug facial
   if (faceMetrics && EL.v_eye) {
-    EL.v_eye.textContent    = faceMetrics.eye_openness.toFixed(3);
-    EL.v_furrow.textContent = faceMetrics.brow_furrow.toFixed(3);
-    EL.v_curve.textContent  = faceMetrics.mouth_curve.toFixed(3);
-    EL.v_emocao.textContent = emocao.toUpperCase();
-    EL.v_emocao.style.color = emocao !== 'neutro' ? 'var(--yellow)' : 'var(--dim)';
-    
+  EL.v_eye.textContent    = faceMetrics.eye_openness.toFixed(3);
+  EL.v_furrow.textContent = faceMetrics.brow_furrow.toFixed(3);
+  EL.v_curve.textContent  = faceMetrics.mouth_curve.toFixed(3);
+  EL.v_emocao.textContent = emocao.toUpperCase();
+  EL.v_emocao.style.color = emocao !== 'neutro' ? 'var(--yellow)' : 'var(--dim)';
 
+  
+  const elRaise  = document.getElementById('v_raise');
+  const elRaiseB = document.getElementById('v_raise_base');
+  const elRelLev = document.getElementById('v_rel_levant');
+
+  if (elRaise)  elRaise.textContent  = faceMetrics.brow_raise.toFixed(3);
+  if (elRaiseB) elRaiseB.textContent = _baseline
+    ? _baseline.brow_raise.toFixed(3)
+    : 'calibrando...';
+  if (elRelLev && _baseline) {
+    const rel = (faceMetrics.brow_raise - _baseline.brow_raise) / (_baseline.brow_raise || 0.01);
+    elRelLev.textContent = rel.toFixed(3);
+    elRelLev.style.color = rel > 0.12  ? '#00e5a0'   // verde = curioso
+                         : rel < -0.08 ? '#ff3d5a'   // vermelho = desanimado
+                         :               '#4a5a70';  // cinza = neutro
   }
+}
 
 
 

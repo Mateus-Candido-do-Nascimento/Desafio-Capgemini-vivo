@@ -20,25 +20,28 @@ def _normalizar_tempo(tempo_parado: int) -> float:
     0s = 0.0 | 30s = 0.5 | 120s+ = 1.0
     Baseado em estudos de dwell time em varejo (Sorensen, 2009)
     """
-    return _clamp(tempo_parado / 120.0)
+    return _clamp(tempo_parado / 60.0)
 
 
 def calcular_engajamento(evento: EventoSensor) -> float:
     """
-    Escala de Engajamento — baseada em Navarro (2008) e 
+    Escala de Engajamento — baseada em Navarro (2008) e
     pesquisa de comportamento em varejo (Sorensen, 2009).
-    
+
     Itens:
     - attention_score:  0.40 — atenção direta ao produto
     - tempo_parado:     0.35 — dwell time (tempo no ponto de venda)
     - presenca:         0.25 — baseline de presença
+    - emocao curioso:  +0.15 — sinal facial de interesse (Ekman, AU1+AU2)
     """
-    tempo_norm = _normalizar_tempo(evento.tempo_parado)
+    tempo_norm   = _normalizar_tempo(evento.tempo_parado)
+    emocao_bonus = 0.15 if evento.emocao == 'curioso' else 0.0
 
     score = (
         evento.attention_score * 0.40 +
         tempo_norm             * 0.35 +
-        (1.0 if evento.presenca else 0.0) * 0.25
+        (1.0 if evento.presenca else 0.0) * 0.25 +
+        emocao_bonus
     )
     return _clamp(score)
 
