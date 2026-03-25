@@ -2,6 +2,7 @@
 // DASHBOARD — estado global, UI helpers, simulador local
 // Responsabilidade: gerenciar estado e atualizar a tela
 // ═══════════════════════════════════════════════════════════
+const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
 
 let stats        = { eventos: 0, alertas: 0, vendas: 0 };
 let alertTimeout = null;
@@ -112,9 +113,13 @@ function atualizarMetricas(payload, decisao, landmarks = null, psicometria = nul
  const barIntencao = psicometria
     ? Math.round(psicometria.intencao_compra * 100)
     : (perfil === 'decisao' ? 88 : perfil === 'engajado' ? 55 : 35);
-const barSaida = psicometria
+  const barSaida = psicometria
     ? Math.round(psicometria.estresse * 100)
     : (perfil === 'saindo' ? 90 : Math.round(hesitation * 55));
+  const barAtencao = psicometria
+    ? Math.round(psicometria.engajamento * 100)
+    : Math.round(attention * 100);
+
 
   // Psicometria
   if (psicometria) {
@@ -221,7 +226,7 @@ function toggleAuto() {
   document.getElementById('autoToggle').classList.toggle('on', autoMode);
   if (autoMode) {
     autoCycle = setInterval(() => {
-      fetch(`http://localhost:8000/simular/${autoCycleList[autoCycleIdx % autoCycleList.length]}`);
+      fetch(`${API_BASE}/simular/${autoCycleList[autoCycleIdx % autoCycleList.length]}`);
       autoCycleIdx++;
     }, 8000);
   } else {
@@ -248,7 +253,8 @@ function triggerScenario(cenario) {
 
   // Traduz cenário legado para estado oficial antes de chamar o backend
   const cenarioNormalizado = _ALIAS_CENARIO[cenario] || cenario;
-  fetch(`http://localhost:8000/simular/${cenarioNormalizado}`)
+  fetch(`${API_BASE}/simular/${cenarioNormalizado}`)
+    
     .catch(() => addLog('SYS', `Erro ao chamar /simular/${cenarioNormalizado} — backend online?`));
 }
 

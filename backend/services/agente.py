@@ -4,6 +4,14 @@ from services.broadcaster import BroadcasterService
 from services.analytics import AnalyticsService
 from services.psicometria import avaliar
 
+_MAPA_PSICO_PARA_OFICIAL = {
+    "comprador_iminente": "decisao",
+    "engajado_ativo":     "engajado",
+    "hesitante":          "indeciso",
+    "observando":         "idle",
+    "resistente":         "saindo",
+}
+
 
 class AgenteService:
     """
@@ -37,11 +45,15 @@ class AgenteService:
 
         # 2. Enriquece o evento com o raciocínio psicométrico
         #    O Groq recebe o contexto científico já calculado
+        estado_psico   = psico.perfil_psico
+        estado_oficial = _MAPA_PSICO_PARA_OFICIAL.get(estado_psico, "idle")
+
         evento_enriquecido = evento.model_copy(update={
-            "estado_estimado": psico.perfil_psico
-                            if evento.estado_estimado == "aguardando"
-                            else evento.estado_estimado,
+            "estado_estimado": estado_oficial
+                    if evento.estado_estimado == "aguardando"
+                    else evento.estado_estimado,
         })
+
 
         # 3. IA generativa interpreta e gera ação pro vendedor
         decisao = await self._ia.analisar(evento_enriquecido)
