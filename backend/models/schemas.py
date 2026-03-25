@@ -53,3 +53,13 @@ class SimularRequest(BaseModel):
     #cenario=None significa aleatório.
     
     cenario: Optional[str] = None
+    
+class AvaliacaoPsicometrica(BaseModel):
+    engajamento:      float
+    hesitacao:        float
+    intencao_compra:  float
+    estresse:         float
+    perfil_psico:     str
+    emocao_detectada: str
+    confianca:        float
+    raciocinio_psico: str
