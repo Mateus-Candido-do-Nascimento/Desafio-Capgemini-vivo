@@ -1,10 +1,12 @@
 import os
 import json
 import time
+import asyncio
 from groq import Groq
 from dotenv import load_dotenv
 from providers.ia_provider import IAProvider
 from models.schemas import EventoSensor, DecisaoIA
+
 
 load_dotenv()
 
@@ -67,7 +69,7 @@ class GroqProvider(IAProvider):
         self._ultimo_estado: str  = "idle"
         self._ultimo_ts:    float = 0.0
 
-    def analisar(self, evento: EventoSensor) -> DecisaoIA:
+    async def analisar(self, evento: EventoSensor) -> DecisaoIA:
         estado_atual = evento.estado_estimado
 
         if estado_atual == "idle":
@@ -88,9 +90,9 @@ class GroqProvider(IAProvider):
         self._ultimo_estado = estado_atual
         self._ultimo_ts     = agora
 
-        return self._chamar_groq(evento, estado_atual)
+        return await self._chamar_groq(evento, estado_atual)
 
-    def _chamar_groq(self, evento: EventoSensor, estado_atual: str) -> DecisaoIA:
+    async def _chamar_groq(self, evento: EventoSensor, estado_atual: str) -> DecisaoIA:
         inicio = time.time()
 
         emocao     = getattr(evento, 'emocao',     'neutro')
@@ -142,7 +144,7 @@ class GroqProvider(IAProvider):
 
             except Exception as e:
                 if "rate_limit" in str(e).lower() and tentativa < 2:
-                    time.sleep(2)
+                    await asyncio.sleep(2)
                     continue
                 return DecisaoIA(
                     perfil        = estado_atual,

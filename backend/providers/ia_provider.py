@@ -9,5 +9,5 @@ class IAProvider(ABC):
     """
 
     @abstractmethod
-    def analisar(self, evento: EventoSensor) -> DecisaoIA:
+    async def analisar(self, evento: EventoSensor) -> DecisaoIA:
         ...
