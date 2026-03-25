@@ -3,6 +3,7 @@ from typing import Optional
 from datetime import datetime
 
 
+
 class EventoSensor(BaseModel):
    
     # Payload enviado pelo ESP32 + MediaPipe ao backend.
@@ -35,6 +36,16 @@ class DecisaoIA(BaseModel):
     latencia_ms: int
     erro: bool = False
 
+class AvaliacaoPsicometrica(BaseModel):
+    engajamento:      float
+    hesitacao:        float
+    intencao_compra:  float
+    estresse:         float
+    perfil_psico:     str
+    emocao_detectada: str
+    confianca:        float
+    raciocinio_psico: str
+
 
 class MensagemWS(BaseModel):
     
@@ -44,6 +55,8 @@ class MensagemWS(BaseModel):
     payload: Optional[EventoSensor] = None
     decisao: Optional[DecisaoIA] = None
     landmarks: Optional[dict] = None   # landmarks brutos do MediaPipe
+    psicometria: Optional[AvaliacaoPsicometrica] = None
+
     ts: datetime = Field(default_factory=datetime.now)
 
 
@@ -54,12 +67,3 @@ class SimularRequest(BaseModel):
     
     cenario: Optional[str] = None
     
-class AvaliacaoPsicometrica(BaseModel):
-    engajamento:      float
-    hesitacao:        float
-    intencao_compra:  float
-    estresse:         float
-    perfil_psico:     str
-    emocao_detectada: str
-    confianca:        float
-    raciocinio_psico: str

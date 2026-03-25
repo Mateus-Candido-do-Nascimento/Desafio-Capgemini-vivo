@@ -33,7 +33,8 @@ let wsReconectando = false;
     console.log('ws recebido:',msg);
     if (msg.tipo === 'pong' || msg.tipo === 'connected') return;
     if (!msg.payload || !msg.decisao) return;
-    atualizarMetricas(msg.payload, msg.decisao, msg.landmarks || null);
+    atualizarMetricas(msg.payload, msg.decisao, msg.landmarks || null, msg.psicometria || null);
+
   };
 
   ws.onclose = () => {

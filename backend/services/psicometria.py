@@ -5,27 +5,11 @@
 # Responsabilidade: calcular traços latentes de forma 
 #                   determinística, sem LLM
 # ═══════════════════════════════════════════════════════════
-
-from dataclasses import dataclass
-from models.schemas import EventoSensor
+from models.schemas import EventoSensor, AvaliacaoPsicometrica
 
 
-@dataclass
-class AvaliacaoPsicometrica:
-    # Traços latentes (0.0 a 1.0)
-    engajamento:      float
-    hesitacao:        float
-    intencao_compra:  float
-    estresse:         float
 
-    # Classificação derivada dos traços
-    perfil_psico:     str   # engajado_ativo, comprador_iminente, hesitante, resistente, idle
-    emocao_detectada: str   # curioso, bravo, triste, desanimado, neutro
-    confianca:        float # 0.0 a 1.0 — quão claro é o sinal
-
-    # Explicação científica (vai pro prompt do Groq)
-    raciocinio_psico: str
-
+   
 
 def _clamp(v: float) -> float:
     return max(0.0, min(1.0, v))

@@ -60,6 +60,7 @@ class AgenteService:
                 payload  = evento_enriquecido,
                 decisao  = decisao,
                 landmarks= landmarks,
+                psicometria= psico,
             )
             await self._broadcaster.broadcast(mensagem)
             self._analytics.salvar(evento_enriquecido, decisao)

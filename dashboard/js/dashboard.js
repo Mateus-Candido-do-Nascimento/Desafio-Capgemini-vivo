@@ -66,7 +66,8 @@ function showAlert(text) {
 }
 
 // ── Atualiza métricas na tela ──────────────────────────────
-function atualizarMetricas(payload, decisao, landmarks = null) {
+function atualizarMetricas(payload, decisao, landmarks = null, psicometria = null) {
+
 
   // Guards — protege contra campos null/undefined antes de qualquer operação
   // Isso evita o crash no .toFixed() e .toUpperCase() quando o payload
@@ -108,13 +109,23 @@ function atualizarMetricas(payload, decisao, landmarks = null) {
     `metric-value ${hesitation > 0.6 ? 'red' : hesitation > 0.3 ? 'orange' : 'green'}`;
 
   // Barras
-  const barAtencao  = Math.round(attention * 100);
-  const barIntencao = perfil === 'decisao'  ? 88 :
-                      perfil === 'engajado' ? 55 :
-                      perfil === 'indeciso' ? 35 : 10;
-  const barSaida    = perfil === 'saindo'
-    ? 90
-    : Math.round(hesitation * 55);
+ const barIntencao = psicometria
+    ? Math.round(psicometria.intencao_compra * 100)
+    : (perfil === 'decisao' ? 88 : perfil === 'engajado' ? 55 : 35);
+const barSaida = psicometria
+    ? Math.round(psicometria.estresse * 100)
+    : (perfil === 'saindo' ? 90 : Math.round(hesitation * 55));
+
+  // Psicometria
+  if (psicometria) {
+    document.getElementById('psicoEngajamento').textContent = Math.round(psicometria.engajamento * 100) + '%';
+    document.getElementById('psicoHesitacao').textContent   = Math.round(psicometria.hesitacao * 100) + '%';
+    document.getElementById('psicoIntencao').textContent    = Math.round(psicometria.intencao_compra * 100) + '%';
+    document.getElementById('psicoEstresse').textContent    = Math.round(psicometria.estresse * 100) + '%';
+    document.getElementById('psicoPerfil').textContent      = `"${psicometria.perfil_psico}"`;
+    document.getElementById('psicoEmocao').textContent      = `"${psicometria.emocao_detectada}"`;
+    document.getElementById('psicoConfianca').textContent   = Math.round(psicometria.confianca * 100) + '%';
+  }
 
   document.getElementById('barAtencao').style.width     = barAtencao + '%';
   document.getElementById('barAtencaoVal').textContent  = barAtencao + '%';
