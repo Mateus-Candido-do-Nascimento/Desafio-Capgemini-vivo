@@ -126,12 +126,22 @@ async function iniciar(facingMode = 'user') {
   setActiveBtn(facingMode);
   EL.statusTxt.textContent = 'iniciando...';
 
+  // Reseta baseline ao trocar câmera — novo ambiente, nova calibração
+  _baseline       = null;
+  _baselineBuffer = [];
+  _shoulderDxMax  = 0.25;
+
   let stream = null;
-  const tentativas = [
-    { video: { facingMode: { ideal: facingMode } }, audio: false },
-    { video: { facingMode: { ideal: 'user'      } }, audio: false },
-    { video: true, audio: false },
-  ];
+  // Traseira: não faz fallback para frontal — são cenários diferentes
+  const tentativas = facingMode === 'environment'
+    ? [
+        { video: { facingMode: { exact: 'environment' } }, audio: false },
+        { video: { facingMode: { ideal: 'environment' } }, audio: false },
+      ]
+    : [
+        { video: { facingMode: { ideal: 'user' } }, audio: false },
+        { video: true, audio: false },
+      ];
   for (const constraints of tentativas) {
     try { stream = await navigator.mediaDevices.getUserMedia(constraints); break; }
     catch (e) { log('Tentativa falhou: ' + e.message, 'err'); }
@@ -140,6 +150,14 @@ async function iniciar(facingMode = 'user') {
     log('Nenhuma câmera disponível', 'err');
     setActiveBtn(null);
     return;
+  }
+
+  // Espelho: frontal = selfie (espelhado), traseira = mundo real
+  const canvas = document.getElementById('poseCanvas');
+  if (facingMode === 'environment') {
+    canvas.classList.remove('mirror');
+  } else {
+    canvas.classList.add('mirror');
   }
 
   cameraAtiva = stream;

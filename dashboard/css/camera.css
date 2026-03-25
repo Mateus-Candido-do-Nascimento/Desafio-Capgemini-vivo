@@ -35,6 +35,8 @@
       width: 100%; height: 100%;
       display: block;
     }
+    /* Espelho — frontal parece selfie, traseira mostra o mundo real */
+    .mirror { transform: scaleX(-1); }
 
     #estadoBox { width:100%; max-width:380px; background:var(--panel);
                  border:1px solid var(--border); border-radius:8px;
