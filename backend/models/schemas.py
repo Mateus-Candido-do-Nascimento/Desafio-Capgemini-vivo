@@ -35,7 +35,10 @@ class DecisaoIA(BaseModel):
     urgencia: str
     latencia_ms: int
     erro: bool = False
-
+     # Ação física para o ESP32 (LED + LCD)
+    acao_fisica: str = "aguardar"   # "agir" | "aguardar"
+    acao_lcd: str = ""              # texto truncado para LCD 16x2
+    
 class AvaliacaoPsicometrica(BaseModel):
     engajamento:      float
     hesitacao:        float

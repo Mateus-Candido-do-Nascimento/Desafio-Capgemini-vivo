@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from models.schemas import EventoSensor
 from services.agente import AgenteService
+from services.estado_sensor import atualizar_camera, get_evento_fundido
 
 router = APIRouter(prefix="/sensor", tags=["camera"])
 
@@ -46,7 +47,9 @@ def criar_router(agente: AgenteService) -> APIRouter:
         Nenhuma imagem é armazenada — só coordenadas abstratas.
         """
         evento  = _traduzir_frame(frame)
-        decisao = await agente.processar(evento, tipo="camera", landmarks=frame.model_dump())
+        atualizar_camera(evento)
+        evento_fundido = get_evento_fundido()
+        decisao = await agente.processar(evento_fundido, tipo="camera", landmarks=frame.model_dump())
         return {"status": "processado", "estado": evento.estado_estimado, "decisao": decisao}
 
     return router
