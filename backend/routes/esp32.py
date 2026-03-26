@@ -12,15 +12,6 @@ class FrameESP32(BaseModel):
     tempo_parado: int   = Field(default=0, ge=0)
     distancia_cm: float = Field(default=0.0)
 
-# ── Mensagens para o cliente — psicologia de varejo Vivo ────
-_LCD = {
-    "idle":     ("  Vivo Store   ", " Bem-vindo! :) "),
-    "engajado": ("5G em todo lugar", "Veja nossos pl."),
-    "indeciso": ("Parcele em 24x  ", "  Sem juros!   "),
-    "decisao":  (" Otima escolha!", " Ative agora!  "),
-    "saindo":   ("Fale com a gente", "  Ligue 1058   "),
-}
-
 _LED = {
     "idle":     "apagado",
     "engajado": "pulso_suave",
@@ -44,13 +35,10 @@ def criar_router(agente):
         estado  = decisao.perfil
 
         # 3. Traduz decisão em ação física para o cliente
-        lcd1, lcd2 = _LCD.get(estado, _LCD["idle"])
-        led        = _LED.get(estado, "apagado")
+        led = _LED.get(estado, "apagado")
 
         return {
             "estado":       estado,
-            "lcd_linha1":   lcd1,
-            "lcd_linha2":   lcd2,
             "led":          led,
             "acao_vendedor":decisao.acao_vendedor,
             "urgencia":     decisao.urgencia,

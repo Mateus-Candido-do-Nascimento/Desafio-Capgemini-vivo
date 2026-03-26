@@ -2,18 +2,15 @@
 // OlhoVivo AI — Firmware ESP32
 //
 // SENTIR: HC-SR04 → presença + tempo_parado
-// AGIR:   LED + LCD voltados ao cliente no ponto de venda
+// AGIR:   LED no ponto de venda
 //
 // Bibliotecas necessárias (instalar via Library Manager):
-//   - ArduinoJson        (versão 6.x)
-//   - LiquidCrystal_I2C  (por Frank de Brabander)
+//   - ArduinoJson  (versão 6.x)
 // ═══════════════════════════════════════════════════════════
 
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
-#include <Wire.h>
-#include <LiquidCrystal_I2C.h>
 
 const char* WIFI_SSID     = "Brasilino2G";
 const char* WIFI_PASSWORD = "42081467";
@@ -22,9 +19,6 @@ const char* BACKEND_URL   = "https://costally-mythopoeic-alida.ngrok-free.dev/se
 #define TRIG_PIN   14
 #define ECHO_PIN  27
 #define LED_PIN    2
-
-LiquidCrystal_I2C lcd(0x27, 16, 2);
-bool lcdDisponivel = false;
 
 const float DISTANCIA_MAX_CM = 150.0;
 const int   LEITURA_MS       = 500;
@@ -38,14 +32,6 @@ unsigned long ultimoPost     = 0;
 String        ledAtual       = "apagado";
 unsigned long ledUltimoTick  = 0;
 bool          ledEstado      = false;
-
-// ── LCD ──────────────────────────────────────────────────
-void lcdMostrar(String linha1, String linha2) {
-  if (!lcdDisponivel) return;
-  lcd.clear();
-  lcd.setCursor(0, 0); lcd.print(linha1);
-  lcd.setCursor(0, 1); lcd.print(linha2);
-}
 
 // ── LED ──────────────────────────────────────────────────
 void atualizarLED() {
@@ -87,7 +73,6 @@ void reconectarWiFi() {
   if (WiFi.status() == WL_CONNECTED) return;
 
   Serial.println("[OlhoVivo] WiFi caiu — reconectando...");
-  lcdMostrar("  Reconectando  ", "   aguarde...  ");
   WiFi.disconnect();
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
@@ -99,10 +84,8 @@ void reconectarWiFi() {
 
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("\n[OlhoVivo] Reconectado: " + WiFi.localIP().toString());
-    lcdMostrar("  Vivo Store   ", " Bem-vindo! :) ");
   } else {
     Serial.println("\n[OlhoVivo] Falha — tenta em 3s");
-    lcdMostrar("  Vivo Store   ", " Sem conexao...");
   }
 }
 
@@ -128,18 +111,15 @@ void enviarAoBackend() {
 
   if (httpCode == 200) {
     String resposta = http.getString();
-    StaticJsonDocument<512> resp;
+    StaticJsonDocument<256> resp;
     if (!deserializeJson(resp, resposta)) {
       String estado   = resp["estado"]        | "idle";
-      String lcd1     = resp["lcd_linha1"]    | "  Vivo Store   ";
-      String lcd2     = resp["lcd_linha2"]    | " Bem-vindo! :) ";
       String led      = resp["led"]           | "apagado";
       String acaoVend = resp["acao_vendedor"] | "";
 
       Serial.printf("[OlhoVivo] %s | led=%s | %s\n",
                     estado.c_str(), led.c_str(), acaoVend.c_str());
 
-      lcdMostrar(lcd1, lcd2);
       ledAtual = led;
     }
   } else {
@@ -159,12 +139,6 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
 
-  Wire.begin(21, 22);
-  lcdDisponivel = true;
-  lcd.init();
-  lcd.backlight();
-  lcdMostrar("  Vivo Store   ", " Conectando... ");
-
   Serial.println("\n[OlhoVivo] Conectando WiFi...");
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   int t = 0;
@@ -174,14 +148,12 @@ void setup() {
 
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("\n[OlhoVivo] WiFi: " + WiFi.localIP().toString());
-    lcdMostrar("  Vivo Store   ", " Bem-vindo! :) ");
     for (int i = 0; i < 3; i++) {
       digitalWrite(LED_PIN, HIGH); delay(150);
       digitalWrite(LED_PIN, LOW);  delay(150);
     }
   } else {
     Serial.println("\n[OlhoVivo] Sem WiFi");
-    lcdMostrar("  Vivo Store   ", " Sem conexao...");
   }
 }
 
@@ -202,7 +174,6 @@ void loop() {
     } else if (!presente && presenca) {
       presenca = false; tempo_parado = 0;
       ledAtual = "apagado";
-      lcdMostrar("  Vivo Store   ", " Bem-vindo! :) ");
     } else if (presente) {
       tempo_parado = (agora - presencaInicio) / 1000;
     }
