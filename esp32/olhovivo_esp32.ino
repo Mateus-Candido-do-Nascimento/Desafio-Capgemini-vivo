@@ -15,12 +15,12 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
-const char* WIFI_SSID     = "MCN";
-const char* WIFI_PASSWORD = "12345678";
+const char* WIFI_SSID     = "Brasilino2G";
+const char* WIFI_PASSWORD = "42081467";
 const char* BACKEND_URL   = "https://costally-mythopoeic-alida.ngrok-free.dev/sensor/esp32";
 
-#define TRIG_PIN   5
-#define ECHO_PIN  18
+#define TRIG_PIN   14
+#define ECHO_PIN  27
 #define LED_PIN    2
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
@@ -193,8 +193,9 @@ void loop() {
 
   if (agora - ultimaLeitura >= LEITURA_MS) {
     ultimaLeitura = agora;
-    float dist    = medirDistancia();
+    float dist     = medirDistancia();
     bool  presente = (dist < DISTANCIA_MAX_CM);
+    bool  mudou    = (presente != presenca);
 
     if (presente && !presenca) {
       presenca = true; presencaInicio = agora; tempo_parado = 0;
@@ -206,8 +207,10 @@ void loop() {
       tempo_parado = (agora - presencaInicio) / 1000;
     }
 
-    Serial.printf("[Sensor] dist=%.0fcm | presente=%s | tempo=%ds\n",
-                  dist, presente ? "SIM" : "NAO", tempo_parado);
+    if (mudou || (presente && tempo_parado % 5 == 0 && tempo_parado > 0)) {
+      Serial.printf("[Sensor] dist=%.0fcm | presente=%s | tempo=%ds\n",
+                    dist, presente ? "SIM" : "NAO", tempo_parado);
+    }
   }
 
   if (agora - ultimoPost >= POST_MS) {

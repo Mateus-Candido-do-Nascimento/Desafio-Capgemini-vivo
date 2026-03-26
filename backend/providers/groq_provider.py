@@ -83,9 +83,10 @@ class GroqProvider(IAProvider):
     """
 
     def __init__(self):
-        self._client         = Groq(api_key=os.getenv("GROQ_API_KEY"))
-        self._ultimo_estado: str  = "idle"
-        self._ultimo_ts:    float = 0.0
+        self._client          = Groq(api_key=os.getenv("GROQ_API_KEY"))
+        self._ultimo_estado:  str       = "idle"
+        self._ultimo_ts:      float     = 0.0
+        self._ultima_decisao: DecisaoIA = None
 
     async def analisar(
         self,
@@ -95,6 +96,7 @@ class GroqProvider(IAProvider):
         estado_atual = evento.estado_estimado
 
         if estado_atual == "idle":
+            self._ultima_decisao = None
             return self._decisao_idle()
 
         agora        = time.time()
@@ -107,12 +109,12 @@ class GroqProvider(IAProvider):
         contexto_novo       = emocao_relevante or substado_relevante
 
         if mesmo_estado and not contexto_novo and (agora - self._ultimo_ts) < cooldown:
-            return self._decisao_idle()
+            return self._ultima_decisao or self._decisao_idle()
 
-        self._ultimo_estado = estado_atual
-        self._ultimo_ts     = agora
-
-        return await self._chamar_groq(evento, estado_atual, psico)
+        self._ultimo_estado  = estado_atual
+        self._ultimo_ts      = agora
+        self._ultima_decisao = await self._chamar_groq(evento, estado_atual, psico)
+        return self._ultima_decisao
 
     async def _chamar_groq(
         self,

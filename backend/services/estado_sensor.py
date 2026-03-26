@@ -39,6 +39,8 @@ def atualizar_esp32(presenca: bool, tempo_parado: int):
     """ESP32 atualiza sua parte do quadro."""
     _estado["presenca"]     = presenca
     _estado["tempo_parado"] = tempo_parado
+    if not presenca:
+        _estado["estado_estimado"] = "aguardando"
 
 
 def get_evento_fundido() -> EventoSensor:

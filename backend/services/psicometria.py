@@ -17,10 +17,10 @@ def _clamp(v: float) -> float:
 
 def _normalizar_tempo(tempo_parado: int) -> float:
     """Normaliza tempo parado em segundos para 0-1.
-    0s = 0.0 | 30s = 0.5 | 120s+ = 1.0
-    Baseado em estudos de dwell time em varejo (Sorensen, 2009)
+    0s = 0.0 | 10s = 0.5 | 20s+ = 1.0
+    Ajustado para PDV Vivo — 20s parado já indica interesse real.
     """
-    return _clamp(tempo_parado / 60.0)
+    return _clamp(tempo_parado / 20.0)
 
 
 def calcular_engajamento(evento: EventoSensor) -> float:
