@@ -4,13 +4,12 @@ from contextlib import asynccontextmanager
 
 from models.schemas import MensagemWS
 from providers.groq_provider import GroqProvider
-from providers.simulator_provider import SimulatorProvider
 from services.broadcaster import BroadcasterService
 from services.analytics import AnalyticsService
 from services.agente import AgenteService
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
-from routes import evento, simular, camera, esp32
+from routes import evento, camera, esp32
 # ─────────────────────────────────────────
 # Instâncias únicas (injeção manual)
 # ─────────────────────────────────────────
@@ -18,7 +17,6 @@ from routes import evento, simular, camera, esp32
 broadcaster = BroadcasterService()
 analytics   = AnalyticsService()
 ia          = GroqProvider()
-sensor      = SimulatorProvider()
 agente      = AgenteService(ia=ia, broadcaster=broadcaster, analytics=analytics)
 
 
@@ -58,7 +56,6 @@ if DASHBOARD_DIR.exists():
 # ─────────────────────────────────────────
 
 app.include_router(evento.criar_router(agente=agente))
-app.include_router(simular.criar_router(agente=agente, sensor=sensor))
 app.include_router(camera.criar_router(agente=agente))
 app.include_router(esp32.criar_router(agente=agente))
 

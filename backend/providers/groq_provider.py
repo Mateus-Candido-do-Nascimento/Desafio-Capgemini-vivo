@@ -52,8 +52,23 @@ SUB-ESTADOS (gestos):
 Estados: idle, engajado, indeciso, decisao, saindo
 Urgência: BAIXA, MEDIA, ALTA, CRITICA
 
+LED FÍSICO (campo acao_cliente — age sobre o CLIENTE, independente do que o vendedor faz):
+acao_vendedor = instrução pro vendedor. acao_cliente = LED no PDV para o cliente. São campos separados.
+Vendedor pode "observar" enquanto o LED já comunica sutilmente com o cliente. Nunca use nenhuma_acao para engajado/indeciso/decisao.
+
+Regra direta por estado — siga exatamente:
+- idle                → nenhuma_acao
+- engajado            → engajar_informar    (sempre — cliente está olhando, LED informa sutilmente)
+- indeciso            → converter_decisao   (sempre — cliente hesita, LED oferece incentivo)
+- decisao             → engajar_informar    (facilita sem pressionar)
+- saindo + engaj alto → recuperar_interesse (LED chama atenção com oferta rápida)
+- saindo + engaj baixo→ nenhuma_acao        (cliente não comprador, não force)
+
+Valores válidos para acao_cliente (use apenas estes):
+engajar_informar | converter_decisao | recuperar_interesse | nenhuma_acao
+
 Formato obrigatório:
-{"estado":"engajado","confianca":0.82,"raciocinio":"1 frase curta.","acao_vendedor":"Instrução objetiva (max 12 palavras).","urgencia":"MEDIA"}"""
+{"estado":"engajado","confianca":0.82,"raciocinio":"1 frase curta.","acao_vendedor":"Instrução objetiva (max 12 palavras).","acao_cliente":"engajar_informar","urgencia":"MEDIA"}"""
 
 _ALIAS = {
     "INDECISO":        "indeciso",
@@ -68,7 +83,14 @@ _COOLDOWN = {
     "engajado":  20,
     "indeciso":  12,
     "decisao":    5,
-    "saindo":    10,  # era 2 — evita spam de recomendações precipitadas
+    "saindo":    10,
+}
+
+_ACOES_CLIENTE = {
+    "nenhuma_acao",        # todos apagados
+    "engajar_informar",    # LED 1 — cliente atento, destacar produto
+    "converter_decisao",   # LED 2 — cliente indeciso, oferecer incentivo
+    "recuperar_interesse", # LED 3 — cliente saindo, chamar atenção
 }
 
 class GroqProvider(IAProvider):
@@ -161,13 +183,18 @@ class GroqProvider(IAProvider):
                         {"role": "user",   "content": user_msg},
                     ],
                     temperature=0.2,
-                    max_tokens=80,
+                    max_tokens=150,
                 )
                 raw  = response.choices[0].message.content.strip()
+                print(f"[GROQ RAW] {raw}")
                 data = json.loads(raw)
 
                 estado_retornado = data.get("estado", estado_atual)
                 data["estado"] = _ALIAS.get(estado_retornado.upper(), estado_retornado.lower())
+
+                acao_cliente_raw = data.get("acao_cliente", "nenhuma_acao")
+                acao_cliente     = acao_cliente_raw if acao_cliente_raw in _ACOES_CLIENTE else "nenhuma_acao"
+                print(f"[GROQ] acao_cliente_raw={acao_cliente_raw!r} → validado={acao_cliente!r}")
 
                 return DecisaoIA(
                     perfil        = data["estado"],
@@ -175,6 +202,7 @@ class GroqProvider(IAProvider):
                     raciocinio    = data.get("raciocinio", ""),
                     acao_display  = data.get("acao_vendedor", ""),
                     acao_vendedor = data.get("acao_vendedor", ""),
+                    acao_cliente  = acao_cliente,
                     urgencia      = data.get("urgencia", "MEDIA"),
                     latencia_ms   = int((time.time() - inicio) * 1000),
                     erro          = False,

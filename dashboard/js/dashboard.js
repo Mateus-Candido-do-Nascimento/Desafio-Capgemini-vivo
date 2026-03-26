@@ -1,18 +1,14 @@
 // ═══════════════════════════════════════════════════════════
-// DASHBOARD — estado global, UI helpers, simulador local
+// DASHBOARD — estado global, UI helpers
 // Responsabilidade: gerenciar estado e atualizar a tela
 // ═══════════════════════════════════════════════════════════
-const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000`;
+const hostname = window.location.hostname;
+const API_BASE = (hostname === 'localhost' || hostname === '127.0.0.1')
+  ? `${window.location.protocol}//${hostname}:8000`
+  : `${window.location.protocol}//${hostname}`;
 
 let stats        = { eventos: 0, alertas: 0, vendas: 0 };
 let alertTimeout = null;
-let autoMode     = false;
-let autoCycle    = null;
-let autoCycleIdx = 0;
-
-// ── Estados oficiais do sistema (5 estados) ────────────────
-// Alinhado com: groq_provider.py, wireframe.js, schemas.py
-const autoCycleList = ['engajado', 'indeciso', 'decisao', 'saindo', 'idle'];
 
 // ── Clock ──────────────────────────────────────────────────
 
@@ -69,7 +65,6 @@ function showAlert(text) {
 // ── Atualiza métricas na tela ──────────────────────────────
 function atualizarMetricas(payload, decisao, landmarks = null, psicometria = null) {
 
-
   // Guards — protege contra campos null/undefined antes de qualquer operação
   // Isso evita o crash no .toFixed() e .toUpperCase() quando o payload
   // chega incompleto (ex: frame de câmera sem todos os campos preenchidos)
@@ -110,7 +105,7 @@ function atualizarMetricas(payload, decisao, landmarks = null, psicometria = nul
     `metric-value ${hesitation > 0.6 ? 'red' : hesitation > 0.3 ? 'orange' : 'green'}`;
 
   // Barras
- const barIntencao = psicometria
+  const barIntencao = psicometria
     ? Math.round(psicometria.intencao_compra * 100)
     : (perfil === 'decisao' ? 88 : perfil === 'engajado' ? 55 : 35);
   const barSaida = psicometria
@@ -119,7 +114,6 @@ function atualizarMetricas(payload, decisao, landmarks = null, psicometria = nul
   const barAtencao = psicometria
     ? Math.round(psicometria.engajamento * 100)
     : Math.round(attention * 100);
-
 
   // Psicometria
   if (psicometria) {
@@ -217,45 +211,6 @@ function atualizarMetricas(payload, decisao, landmarks = null, psicometria = nul
   document.getElementById('statEventos').textContent = stats.eventos;
   document.getElementById('statAlertas').textContent = stats.alertas;
   document.getElementById('statVendas').textContent  = stats.vendas;
-}
-
-// ── Auto-ciclo ─────────────────────────────────────────────
-
-function toggleAuto() {
-  autoMode = !autoMode;
-  document.getElementById('autoToggle').classList.toggle('on', autoMode);
-  if (autoMode) {
-    autoCycle = setInterval(() => {
-      fetch(`${API_BASE}/simular/${autoCycleList[autoCycleIdx % autoCycleList.length]}`);
-      autoCycleIdx++;
-    }, 8000);
-  } else {
-    clearInterval(autoCycle);
-  }
-}
-
-// ── Botões do simulador ────────────────────────────────────
-// Mapeamento: nome do botão no HTML → estado oficial do sistema
-const _ALIAS_CENARIO = {
-  indeciso:     'indeciso',
-  comprando:    'decisao',
-  saindo:       'saindo',
-  pesquisa:     'engajado',
-  medo_de_errar:'indeciso',
-  ausente:      'idle',
-};
-
-function triggerScenario(cenario) {
-  document.querySelectorAll('.scenario-btn').forEach(b => b.classList.remove('active'));
-  const btns = ['indeciso','comprando','saindo','pesquisa','medo_de_errar','ausente'];
-  const idx  = btns.indexOf(cenario);
-  if (idx >= 0) document.querySelectorAll('.scenario-btn')[idx].classList.add('active');
-
-  // Traduz cenário legado para estado oficial antes de chamar o backend
-  const cenarioNormalizado = _ALIAS_CENARIO[cenario] || cenario;
-  fetch(`${API_BASE}/simular/${cenarioNormalizado}`)
-    
-    .catch(() => addLog('SYS', `Erro ao chamar /simular/${cenarioNormalizado} — backend online?`));
 }
 
 // ── Boot ───────────────────────────────────────────────────

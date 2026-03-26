@@ -131,7 +131,7 @@
 
       <div class="decision-text" id="decisionText">
         Sistema online. Aguardando detecção de presença via ESP32.<br>
-        <span style="color:var(--text-dim);font-size:13px;">Simulador de eventos disponível no painel direito →</span>
+        <span style="color:var(--text-dim);font-size:13px;">Aguardando dados da câmera e do ESP32.</span>
       </div>
 
       <div class="decision-action" id="decisionAction">
@@ -176,7 +176,7 @@
     </div>
   </div>
 
-  <!-- RIGHT: SIMULATOR + EVENTS -->
+  <!-- RIGHT: EVENTS + STATS -->
   <div class="right-panel">
 
     <div class="event-log-panel">
@@ -187,31 +187,6 @@
     </div>
 
     <div class="simulator-panel">
-      <div class="sim-title">SIMULADOR ESP32</div>
-      <div class="scenario-grid">
-        <button class="scenario-btn" onclick="triggerScenario('indeciso')">
-          <span class="icon">🤔</span>INDECISO
-        </button>
-        <button class="scenario-btn" onclick="triggerScenario('comprando')">
-          <span class="icon">🛍️</span>COMPRANDO
-        </button>
-        <button class="scenario-btn" onclick="triggerScenario('saindo')">
-          <span class="icon">🚪</span>SAINDO
-        </button>
-        <button class="scenario-btn" onclick="triggerScenario('pesquisa')">
-          <span class="icon">🔍</span>PESQUISA
-        </button>
-        <button class="scenario-btn" onclick="triggerScenario('medo')">
-          <span class="icon">😟</span>MEDO ERR.
-        </button>
-        <button class="scenario-btn" onclick="triggerScenario('ausente')">
-          <span class="icon">⭕</span>SEM PRESENÇA
-        </button>
-      </div>
-      <div class="auto-toggle">
-        <span class="auto-label">AUTO-CICLO (8s)</span>
-        <div class="toggle-switch" id="autoToggle" onclick="toggleAuto()"></div>
-      </div>
       <div class="stats-row">
         <div class="stat-mini"><div class="stat-mini-val" id="statEventos">0</div><div class="stat-mini-lbl">EVENTOS</div></div>
         <div class="stat-mini"><div class="stat-mini-val" id="statAlertas">0</div><div class="stat-mini-lbl">ALERTAS</div></div>

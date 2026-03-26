@@ -12,6 +12,8 @@ _MAPA_PSICO_PARA_OFICIAL = {
     "resistente":         "saindo",
 }
 
+_ESTADOS_OFICIAIS = {"idle", "engajado", "indeciso", "decisao", "saindo"}
+
 
 class AgenteService:
     """
@@ -48,10 +50,15 @@ class AgenteService:
         estado_psico   = psico.perfil_psico
         estado_oficial = _MAPA_PSICO_PARA_OFICIAL.get(estado_psico, "idle")
 
+        # Usa estado psicométrico se o evento não trouxer um estado oficial
+        # (cobre tanto "aguardando" quanto qualquer vocab legado que escape)
+        estado_normalizado = (
+            estado_oficial
+            if evento.estado_estimado not in _ESTADOS_OFICIAIS
+            else evento.estado_estimado
+        )
         evento_enriquecido = evento.model_copy(update={
-            "estado_estimado": estado_oficial
-                    if evento.estado_estimado == "aguardando"
-                    else evento.estado_estimado,
+            "estado_estimado": estado_normalizado
         })
 
 

@@ -35,9 +35,7 @@ class DecisaoIA(BaseModel):
     urgencia: str
     latencia_ms: int
     erro: bool = False
-     # Ação física para o ESP32 (LED + LCD)
-    acao_fisica: str = "aguardar"   # "agir" | "aguardar"
-    acao_lcd: str = ""              # texto truncado para LCD 16x2
+    acao_cliente: str = "nenhuma_acao"  # label fechado → controla ESP32
     
 class AvaliacaoPsicometrica(BaseModel):
     engajamento:      float
@@ -63,10 +61,3 @@ class MensagemWS(BaseModel):
     ts: datetime = Field(default_factory=datetime.now)
 
 
-class SimularRequest(BaseModel):
-    
-    # Body do POST /simular.
-    #cenario=None significa aleatório.
-    
-    cenario: Optional[str] = None
-    

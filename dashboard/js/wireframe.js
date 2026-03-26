@@ -296,7 +296,7 @@ function desenharPose(t) {
   [neck, shoulderL, shoulderR, elbowL, elbowR, wristL, wristR,
    hip, hipL, hipR, kneeL, kneeR, footL, footR].forEach(j => drawJoint(j));
 
-  if (wireframeState === 'comprando' || wireframeState === 'pesquisa' || wireframeState === 'decisao' || wireframeState === 'engajado') {
+  if (wireframeState === 'decisao' || wireframeState === 'engajado') {
     const pulse = (Math.sin(t * 0.1) + 1) * 0.5;
     ctx.strokeStyle = `rgba(${hexToRgb(cor)},${pulse * 0.4 * p.opacity})`;
     ctx.lineWidth = 1; ctx.setLineDash([3, 5]);
@@ -339,11 +339,12 @@ function setLandmarks(lm, estado) {
   wireframeState = estado || 'idle';
 }
 
-// Chamado pelo simulador (sem câmera)
+// Chamado quando não há landmarks (sem câmera ativa)
 function setEstado(estado) {
   modoLandmarks  = false;
-  wireframeState = estadoParaPose[estado] ?? 'idle';
-  targetPose     = { ...poses[wireframeState] || poses.idle };
+  wireframeState = estado in COR_ESTADO ? estado : 'idle';
+  const poseName = estadoParaPose[estado] ?? 'idle';
+  targetPose     = { ...poses[poseName] || poses.idle };
 }
 
 
