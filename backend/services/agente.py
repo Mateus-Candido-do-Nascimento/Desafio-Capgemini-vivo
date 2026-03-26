@@ -8,7 +8,7 @@ _MAPA_PSICO_PARA_OFICIAL = {
     "comprador_iminente": "decisao",
     "engajado_ativo":     "engajado",
     "hesitante":          "indeciso",
-    "observando":         "idle",
+    "observando":         "engajado",
     "resistente":         "saindo",
 }
 

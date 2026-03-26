@@ -21,9 +21,9 @@ const char* BACKEND_URL   = "https://costally-mythopoeic-alida.ngrok-free.dev/se
 
 #define TRIG_PIN   14
 #define ECHO_PIN   27
-#define LED1_PIN    2   // engajar_informar    — já conectado
-#define LED2_PIN    4   // converter_decisao   — conectar quando disponível
-#define LED3_PIN    5   // recuperar_interesse — conectar quando disponível
+#define LED1_PIN   25   // engajar_informar    — já conectado
+#define LED2_PIN   32   // converter_decisao   — conectar quando disponível
+#define LED3_PIN   33   // recuperar_interesse — conectar quando disponível
 
 const float DISTANCIA_MAX_CM = 150.0;
 const int   LEITURA_MS       = 500;
