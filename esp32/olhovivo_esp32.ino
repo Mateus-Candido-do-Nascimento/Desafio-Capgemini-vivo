@@ -15,8 +15,8 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 
-const char* WIFI_SSID     = "Brasilino2G";
-const char* WIFI_PASSWORD = "42081467";
+const char* WIFI_SSID     = "wifi";
+const char* WIFI_PASSWORD = "senha";
 const char* BACKEND_URL   = "https://costally-mythopoeic-alida.ngrok-free.dev/sensor/esp32";
 
 #define TRIG_PIN   14
